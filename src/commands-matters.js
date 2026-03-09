@@ -1,32 +1,24 @@
-const { fetchMattersPage, getValidAccessToken } = require("./clio-api");
+const {
+  fetchMatter,
+  fetchMattersPage,
+  getValidAccessToken,
+} = require("./clio-api");
 const { getConfig, getTokenSet } = require("./store");
+const {
+  clip,
+  compactQuery,
+  fetchPages,
+  formatBoolean,
+  parseLimit,
+  printKeyValueRows,
+  readContactName,
+  readUserName,
+} = require("./resource-utils");
 
-const DEFAULT_FIELDS =
+const DEFAULT_LIST_FIELDS =
   "id,display_number,description,status,open_date,close_date,client{id,name,first_name,last_name}";
-
-function parseLimit(limitInput) {
-  if (limitInput === undefined || limitInput === null || limitInput === "") {
-    return undefined;
-  }
-
-  const parsed = Number(limitInput);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 200) {
-    throw new Error("`--limit` must be an integer between 1 and 200.");
-  }
-
-  return parsed;
-}
-
-function clip(value, maxLength) {
-  const text = String(value || "");
-  if (text.length <= maxLength) {
-    return text;
-  }
-  if (maxLength <= 3) {
-    return ".".repeat(maxLength);
-  }
-  return `${text.slice(0, maxLength - 3)}...`;
-}
+const DEFAULT_GET_FIELDS =
+  "id,display_number,number,description,status,billable,open_date,close_date,pending_date,client{id,name,first_name,last_name},practice_area{id,name},responsible_attorney{id,name,email},responsible_staff{id,name,email},originating_attorney{id,name,email},created_at,updated_at";
 
 function readStatus(status) {
   if (!status) {
@@ -39,23 +31,14 @@ function readStatus(status) {
 }
 
 function readClientName(matter) {
-  const single = matter.client;
-  if (single && typeof single === "object") {
-    return (
-      single.name ||
-      [single.first_name, single.last_name].filter(Boolean).join(" ").trim() ||
-      "-"
-    );
+  const single = readContactName(matter.client);
+  if (single !== "-") {
+    return single;
   }
 
   const list = Array.isArray(matter.clients) ? matter.clients : [];
   if (list.length > 0) {
-    const first = list[0];
-    return (
-      first.name ||
-      [first.first_name, first.last_name].filter(Boolean).join(" ").trim() ||
-      "-"
-    );
+    return readContactName(list[0]);
   }
 
   return "-";
@@ -78,45 +61,21 @@ function formatMatterRow(matter) {
 }
 
 function buildMatterQuery(options) {
-  const query = {
+  return compactQuery({
+    client_id: options.clientId || undefined,
+    created_since: options.createdSince || undefined,
+    fields: options.fields || DEFAULT_LIST_FIELDS,
     limit: parseLimit(options.limit),
     order: options.order || undefined,
-    status: options.status || undefined,
-    query: options.query || undefined,
+    originating_attorney_id: options.originatingAttorneyId || undefined,
     page_token: options.pageToken || undefined,
-    fields: options.fields || DEFAULT_FIELDS,
-  };
-
-  Object.keys(query).forEach((key) => {
-    if (query[key] === undefined) {
-      delete query[key];
-    }
+    practice_area_id: options.practiceAreaId || undefined,
+    query: options.query || undefined,
+    responsible_attorney_id: options.responsibleAttorneyId || undefined,
+    responsible_staff_id: options.responsibleStaffId || undefined,
+    status: options.status || undefined,
+    updated_since: options.updatedSince || undefined,
   });
-
-  return query;
-}
-
-async function fetchMatterPages(config, accessToken, query, fetchAllPages) {
-  const firstPage = await fetchMattersPage(config, accessToken, query);
-  const firstData = Array.isArray(firstPage?.data) ? firstPage.data : [];
-  const aggregatedData = [...firstData];
-  let pagesFetched = 1;
-  let nextPageUrl = firstPage?.meta?.paging?.next || null;
-
-  while (fetchAllPages && nextPageUrl) {
-    const nextPage = await fetchMattersPage(config, accessToken, {}, nextPageUrl);
-    const nextData = Array.isArray(nextPage?.data) ? nextPage.data : [];
-    aggregatedData.push(...nextData);
-    pagesFetched += 1;
-    nextPageUrl = nextPage?.meta?.paging?.next || null;
-  }
-
-  return {
-    firstPage,
-    matters: fetchAllPages ? aggregatedData : firstData,
-    pagesFetched,
-    nextPageUrl: fetchAllPages ? null : firstPage?.meta?.paging?.next || null,
-  };
 }
 
 function printMatterList(matterRows, options) {
@@ -125,8 +84,7 @@ function printMatterList(matterRows, options) {
     return;
   }
 
-  const maxRows = 50;
-  const rows = matterRows.slice(0, maxRows);
+  const rows = matterRows.slice(0, 50);
 
   console.log("ID       MATTER                STATUS    CLIENT               DESCRIPTION");
   console.log("-------- --------------------- --------- -------------------- ------------------------------");
@@ -156,12 +114,41 @@ function printMatterList(matterRows, options) {
   }
 }
 
-async function mattersList(options = {}) {
+function printMatter(matter) {
+  printKeyValueRows([
+    ["ID", matter.id],
+    ["Matter", matter.display_number || matter.number],
+    ["Description", matter.description],
+    ["Status", readStatus(matter.status)],
+    ["Client", readClientName(matter)],
+    ["Practice Area", matter.practice_area?.name],
+    ["Responsible Attorney", readUserName(matter.responsible_attorney)],
+    ["Responsible Staff", readUserName(matter.responsible_staff)],
+    ["Originating Attorney", readUserName(matter.originating_attorney)],
+    ["Billable", formatBoolean(matter.billable)],
+    ["Open Date", matter.open_date],
+    ["Pending Date", matter.pending_date],
+    ["Close Date", matter.close_date],
+    ["Created", matter.created_at],
+    ["Updated", matter.updated_at],
+  ]);
+}
+
+async function getAuthContext() {
   const config = await getConfig();
   const tokenSet = await getTokenSet();
   const accessToken = await getValidAccessToken(config, tokenSet);
+  return { config, accessToken };
+}
+
+async function mattersList(options = {}) {
   const query = buildMatterQuery(options);
-  const result = await fetchMatterPages(config, accessToken, query, Boolean(options.all));
+  const { config, accessToken } = await getAuthContext();
+  const result = await fetchPages(
+    (pageQuery, nextPageUrl) => fetchMattersPage(config, accessToken, pageQuery, nextPageUrl),
+    query,
+    Boolean(options.all)
+  );
 
   if (options.json) {
     if (!options.all) {
@@ -172,10 +159,10 @@ async function mattersList(options = {}) {
     console.log(
       JSON.stringify(
         {
-          data: result.matters,
+          data: result.data,
           meta: {
             pages_fetched: result.pagesFetched,
-            returned_count: result.matters.length,
+            returned_count: result.data.length,
           },
         },
         null,
@@ -185,7 +172,7 @@ async function mattersList(options = {}) {
     return;
   }
 
-  const rows = result.matters.map(formatMatterRow);
+  const rows = result.data.map(formatMatterRow);
   printMatterList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
   console.log("");
   console.log(
@@ -193,6 +180,25 @@ async function mattersList(options = {}) {
   );
 }
 
+async function mattersGet(options = {}) {
+  if (!options.id) {
+    throw new Error("Usage: clio-manage matters get <id> [--fields ...] [--json]");
+  }
+
+  const { config, accessToken } = await getAuthContext();
+  const payload = await fetchMatter(config, accessToken, options.id, {
+    fields: options.fields || DEFAULT_GET_FIELDS,
+  });
+
+  if (options.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  printMatter(payload?.data || {});
+}
+
 module.exports = {
+  mattersGet,
   mattersList,
 };

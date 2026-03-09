@@ -49,11 +49,41 @@ clio-manage setup
 clio-manage auth setup
 clio-manage auth login
 clio-manage auth status
+clio-manage contacts list
+clio-manage contacts get 12345
+clio-manage bills list
+clio-manage bills get 987
+clio-manage invoices list
 clio-manage matters list
+clio-manage matters get 456
+clio-manage users list
+clio-manage users get 123
+clio-manage practice-areas list
+clio-manage practice-areas get 45
 clio-manage matters list --status open --limit 50
 clio-manage matters list --all --json
 clio-manage whoami
 clio-manage auth revoke
+```
+
+## Read-only examples
+
+```bash
+clio-manage contacts list --query "acme" --client-only
+clio-manage contacts get 12345
+
+clio-manage matters list --status open --client-id 999
+clio-manage matters get 456
+
+clio-manage bills list --overdue-only --client-id 999
+clio-manage bills get 987
+clio-manage invoices list --status unpaid
+
+clio-manage users list --name "Sarah"
+clio-manage users get 123
+
+clio-manage practice-areas list --name "Family"
+clio-manage practice-areas get 45
 ```
 
 ## Security model
@@ -75,5 +105,5 @@ clio-manage auth revoke
 ## Troubleshooting
 
 - `OS keychain ... failed`: run with `CLIO_*` env vars as fallback, or re-enable your OS keychain service.
-- `403 Forbidden`: confirm your Clio app has Matter read permission and re-authorize.
+- `403 Forbidden`: confirm your Clio app has the relevant Clio permissions for Contacts, Matters, Bills, Users, or Practice Areas, then re-authorize.
 - `401 Unauthorized`: run `clio-manage auth login` again.

@@ -66,6 +66,10 @@ function authBaseUrl(config) {
   return `https://${config.host}`;
 }
 
+function apiBaseUrl(config) {
+  return `${authBaseUrl(config)}/api/v4`;
+}
+
 function buildUrlWithQuery(baseUrl, query = {}) {
   const url = new URL(baseUrl);
 
@@ -151,7 +155,7 @@ async function getValidAccessToken(config, tokenSet) {
 }
 
 async function fetchWhoAmI(config, accessToken) {
-  const url = `${authBaseUrl(config)}/api/v4/users/who_am_i`;
+  const url = `${apiBaseUrl(config)}/users/who_am_i`;
   return getJson(url, {
     authorization: `Bearer ${accessToken}`,
   });
@@ -172,22 +176,91 @@ async function deauthorize(config, accessToken) {
   );
 }
 
-function mattersUrl(config, query = {}) {
-  return buildUrlWithQuery(`${authBaseUrl(config)}/api/v4/matters.json`, query);
+function resourceCollectionUrl(config, resourcePath, query = {}) {
+  return buildUrlWithQuery(`${apiBaseUrl(config)}/${resourcePath}.json`, query);
 }
 
-async function fetchMattersPage(config, accessToken, query = {}, nextPageUrl = null) {
-  const url = nextPageUrl || mattersUrl(config, query);
+function resourceItemUrl(config, resourcePath, id, query = {}) {
+  return buildUrlWithQuery(
+    `${apiBaseUrl(config)}/${resourcePath}/${encodeURIComponent(String(id))}.json`,
+    query
+  );
+}
+
+async function fetchResourcePage(
+  config,
+  accessToken,
+  resourcePath,
+  query = {},
+  nextPageUrl = null
+) {
+  const url = nextPageUrl || resourceCollectionUrl(config, resourcePath, query);
   return getJson(url, {
     authorization: `Bearer ${accessToken}`,
   });
+}
+
+async function fetchResourceById(config, accessToken, resourcePath, id, query = {}) {
+  const url = resourceItemUrl(config, resourcePath, id, query);
+  return getJson(url, {
+    authorization: `Bearer ${accessToken}`,
+  });
+}
+
+async function fetchContactsPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "contacts", query, nextPageUrl);
+}
+
+async function fetchContact(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "contacts", id, query);
+}
+
+async function fetchMattersPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "matters", query, nextPageUrl);
+}
+
+async function fetchMatter(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "matters", id, query);
+}
+
+async function fetchBillsPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "bills", query, nextPageUrl);
+}
+
+async function fetchBill(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "bills", id, query);
+}
+
+async function fetchUsersPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "users", query, nextPageUrl);
+}
+
+async function fetchUser(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "users", id, query);
+}
+
+async function fetchPracticeAreasPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "practice_areas", query, nextPageUrl);
+}
+
+async function fetchPracticeArea(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "practice_areas", id, query);
 }
 
 module.exports = {
   authorizeUrl,
   deauthorize,
   exchangeAuthorizationCode,
+  fetchBill,
+  fetchBillsPage,
+  fetchContact,
+  fetchContactsPage,
+  fetchMatter,
   fetchMattersPage,
+  fetchPracticeArea,
+  fetchPracticeAreasPage,
+  fetchUser,
+  fetchUsersPage,
   fetchWhoAmI,
   getValidAccessToken,
 };
