@@ -129,6 +129,69 @@ function loadAuthSetupTest(askImpl) {
   };
 }
 
+function loadAuthModule(options = {}) {
+  const {
+    clioApiOverrides = {},
+    openBrowserImpl = async () => {},
+    promptOverrides = {},
+    storeOverrides = {},
+  } = options;
+
+  const { module, restore } = loadWithMocks(path.join(ROOT, "src/commands-auth.js"), {
+    "./clio-api": {
+      authorizeUrl: () => "https://app.clio.com/oauth/authorize?client_id=test",
+      deauthorize: async () => {},
+      exchangeAuthorizationCode: async () => ({
+        access_token: "new-access-token",
+        expires_in: 3600,
+        refresh_token: "new-refresh-token",
+      }),
+      fetchWhoAmI: async () => ({
+        data: { id: 1, name: "Casey Example", email: "casey@test" },
+      }),
+      getValidAccessToken: async () => "new-access-token",
+      ...clioApiOverrides,
+    },
+    "./open-browser": {
+      openBrowser: openBrowserImpl,
+    },
+    "./oauth-callback": {
+      waitForOAuthCallback: async () => ({ code: "auth-code", state: "state-1" }),
+    },
+    "./prompt": {
+      ask: async () => null,
+      withPrompt: async (callback) => callback({}),
+      ...promptOverrides,
+    },
+    "./store": {
+      clearTokenSet: async () => {},
+      findConfig: async () => null,
+      getConfig: async () => ({
+        clientId: "client-id-1234",
+        clientSecret: "client-secret-5678",
+        host: "app.clio.com",
+        redirectUri: DEFAULT_REDIRECT_URI,
+        region: "us",
+        regionLabel: "United States",
+        source: "keychain",
+      }),
+      getTokenSet: async () => null,
+      normalizeRegion: (value) => value,
+      parseRedirectUri: (value) => value,
+      saveConfig: async (config) => config,
+      saveTokenSet: async (payload) => ({
+        accessToken: payload.access_token,
+        expiresAt: Math.floor(Date.now() / 1000) + payload.expires_in,
+        refreshToken: payload.refresh_token,
+        source: "keychain",
+      }),
+      ...storeOverrides,
+    },
+  });
+
+  return { module, restore };
+}
+
 function loadClioApi(storeOverrides = {}) {
   return loadWithMocks(path.join(ROOT, "src/clio-api.js"), {
     "./store": {
@@ -379,10 +442,10 @@ test("authSetup prints credential guidance and opens the Clio app creation guide
     if (label === "Region") {
       return fallback;
     }
-    if (label === "Client ID (from your Clio developer app)") {
+    if (label === "App Key / Client ID (from your Clio developer app)") {
       return "client-id";
     }
-    if (label === "Client Secret (from the same Clio app)") {
+    if (label === "App Secret / Client Secret (from the same Clio app)") {
       return "client-secret";
     }
     if (label === "Redirect URI") {
@@ -398,7 +461,7 @@ test("authSetup prints credential guidance and opens the Clio app creation guide
     const output = logs.join("\n");
 
     assert.match(output, /This CLI connects to Clio using your own Clio Developer Application/);
-    assert.match(output, /Client ID and Client Secret/);
+    assert.match(output, /App Key and App Secret/);
     assert.match(output, /Opened the Clio app creation guide in your browser/);
     assert.match(
       output,
@@ -409,8 +472,8 @@ test("authSetup prints credential guidance and opens the Clio app creation guide
       authHarness.promptLabels.map((entry) => entry.label),
       [
         "Region",
-        "Client ID (from your Clio developer app)",
-        "Client Secret (from the same Clio app)",
+        "App Key / Client ID (from your Clio developer app)",
+        "App Secret / Client Secret (from the same Clio app)",
         "Redirect URI",
       ]
     );
@@ -423,6 +486,97 @@ test("authSetup prints credential guidance and opens the Clio app creation guide
     assert.equal(authHarness.clearedTokenSet, 1);
   } finally {
     authHarness.restore();
+  }
+});
+
+test("authLogin rewrites invalid_client errors with actionable guidance", async () => {
+  const { module, restore } = loadAuthModule({
+    clioApiOverrides: {
+      exchangeAuthorizationCode: async () => {
+        throw new Error(
+          'HTTP 401 from https://app.clio.com/oauth/token. {"error":"invalid_client","error_description":"The client identifier provided is invalid."}'
+        );
+      },
+    },
+  });
+
+  try {
+    await assert.rejects(
+      () => module.authLogin(),
+      /Clio rejected the app credentials during OAuth token exchange/
+    );
+
+    await assert.rejects(() => module.authLogin(), /App ID was entered instead of the App Key/);
+    await assert.rejects(() => module.authLogin(), /Redirect URI: http:\/\/127\.0\.0\.1:53123\/callback/);
+  } finally {
+    restore();
+  }
+});
+
+test("setupWizard passes the config it just saved into authLogin", async () => {
+  const flow = [];
+  const savedConfig = {
+    clientId: "saved-client-id",
+    clientSecret: "saved-client-secret",
+    host: "app.clio.com",
+    redirectUri: DEFAULT_REDIRECT_URI,
+    region: "us",
+    regionLabel: "United States",
+    source: "keychain",
+  };
+
+  const { module, restore } = loadAuthModule({
+    clioApiOverrides: {
+      authorizeUrl: (config) => {
+        flow.push({ step: "authorizeUrl", config });
+        return "https://app.clio.com/oauth/authorize?client_id=saved-client-id";
+      },
+      exchangeAuthorizationCode: async (config) => {
+        flow.push({ step: "exchangeAuthorizationCode", config });
+        return {
+          access_token: "new-access-token",
+          expires_in: 3600,
+          refresh_token: "new-refresh-token",
+        };
+      },
+      fetchWhoAmI: async () => ({
+        data: { id: 1, name: "Casey Example", email: "casey@test" },
+      }),
+      getValidAccessToken: async () => "new-access-token",
+    },
+    promptOverrides: {
+      ask: async (_rl, label, fallback) => {
+        if (label === "Region") {
+          return fallback;
+        }
+        if (label === "App Key / Client ID (from your Clio developer app)") {
+          return savedConfig.clientId;
+        }
+        if (label === "App Secret / Client Secret (from the same Clio app)") {
+          return savedConfig.clientSecret;
+        }
+        if (label === "Redirect URI") {
+          return fallback;
+        }
+        throw new Error(`Unexpected prompt label: ${label}`);
+      },
+    },
+    storeOverrides: {
+      saveConfig: async () => savedConfig,
+      getConfig: async () => {
+        throw new Error("setupWizard should not re-read config from store");
+      },
+    },
+  });
+
+  try {
+    await module.setupWizard();
+    assert.deepStrictEqual(
+      flow.map((entry) => entry.config),
+      [savedConfig, savedConfig]
+    );
+  } finally {
+    restore();
   }
 });
 

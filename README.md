@@ -110,3 +110,21 @@ clio-manage practice-areas get 45
 - `OS keychain ... failed`: run with `CLIO_*` env vars as fallback, or re-enable your OS keychain service.
 - `403 Forbidden`: confirm your Clio app has the relevant Clio permissions for Contacts, Matters, Bills, Users, or Practice Areas, then re-authorize.
 - `401 Unauthorized`: run `clio-manage auth login` again.
+
+## Contributing
+
+Contributions are accepted under `Apache-2.0`. This project uses a Developer Certificate of Origin instead of a CLA, so sign commits with `git commit -s`.
+
+See `CONTRIBUTING.md` for the workflow and `DCO` for the certificate text.
+
+## License
+
+Licensed under `Apache-2.0`. See `LICENSE` and `NOTICE`.
+
+## Trademark notice
+
+Clio is a trademark of Themis Solutions Inc. This project is independent and is not affiliated with or endorsed by Clio.
+
+## Security
+
+Please do not post vulnerabilities, OAuth credentials, tokens, or real client data in public issues. See `SECURITY.md`.

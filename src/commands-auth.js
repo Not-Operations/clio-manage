@@ -40,6 +40,51 @@ function formatUserSummary(payload) {
   return { id, name, email };
 }
 
+function maskCredential(value) {
+  const text = String(value || "");
+  if (!text) {
+    return "not set";
+  }
+
+  if (text.length <= 8) {
+    return `${"*".repeat(Math.max(text.length - 2, 0))}${text.slice(-2)}`;
+  }
+
+  return `${text.slice(0, 4)}...${text.slice(-4)}`;
+}
+
+function formatConfigSummary(config) {
+  return [
+    `Config source: ${config.source}`,
+    `Region: ${config.region} (${config.regionLabel})`,
+    `Host: ${config.host}`,
+    `Redirect URI: ${config.redirectUri}`,
+    `App Key: ${maskCredential(config.clientId)}`,
+  ];
+}
+
+function rewriteOAuthError(error, config) {
+  const message = error && error.message ? error.message : String(error);
+
+  if (message.includes("invalid_client")) {
+    return new Error(
+      [
+        "Clio rejected the app credentials during OAuth token exchange (`invalid_client`).",
+        ...formatConfigSummary(config),
+        "Most likely causes:",
+        "- The App Secret is wrong or was copied from a different Clio app.",
+        "- The App ID was entered instead of the App Key.",
+        "- The App Key/App Secret pair does not belong to the selected Clio region.",
+        "- The redirect URI registered in the Clio app does not exactly match the value above.",
+        "Run `clio-manage auth setup` again and copy the App Key and App Secret from the same Clio developer app.",
+        `Original error: ${message}`,
+      ].join("\n")
+    );
+  }
+
+  return error;
+}
+
 function printSetupLinks(redirectUri) {
   console.log("Clio setup links:");
   console.log(`- Developer account guide: ${CLIO_DEVELOPER_ACCOUNT_GUIDE_URL}`);
@@ -52,7 +97,7 @@ function printSetupIntro(redirectUri) {
   console.log("Clio local setup");
   console.log("");
   console.log("This CLI connects to Clio using your own Clio Developer Application.");
-  console.log("Before you continue, create a Clio app and copy its Client ID and Client Secret.");
+  console.log("Before you continue, create a Clio app and copy its App Key and App Secret.");
   console.log("");
   console.log("Useful links:");
   console.log(`- Developer account guide: ${CLIO_DEVELOPER_ACCOUNT_GUIDE_URL}`);
@@ -88,16 +133,16 @@ async function authSetup(options = {}) {
     const regionRaw = await ask(rl, "Region", DEFAULT_REGION);
     const region = normalizeRegion(regionRaw);
     console.log(`Using ${REGIONS[region].label} (${REGIONS[region].host}).`);
-    console.log("Copy the next two values from the Clio Developer Application you just created.");
+    console.log("Copy the next two values from the same Clio Developer Application.");
 
-    const clientId = await ask(rl, "Client ID (from your Clio developer app)");
+    const clientId = await ask(rl, "App Key / Client ID (from your Clio developer app)");
     if (!clientId) {
-      throw new Error("Client ID is required.");
+      throw new Error("App Key / Client ID is required.");
     }
 
-    const clientSecret = await ask(rl, "Client Secret (from the same Clio app)");
+    const clientSecret = await ask(rl, "App Secret / Client Secret (from the same Clio app)");
     if (!clientSecret) {
-      throw new Error("Client Secret is required.");
+      throw new Error("App Secret / Client Secret is required.");
     }
 
     const redirectUriRaw = await ask(rl, "Redirect URI", DEFAULT_REDIRECT_URI);
@@ -122,14 +167,18 @@ async function authSetup(options = {}) {
     console.log("");
     console.log("Next step: run `clio-manage auth login`");
   }
+
+  return saved;
 }
 
-async function authLogin() {
-  const config = await getConfig();
+async function authLogin(options = {}) {
+  const config = options.config || (await getConfig());
   const state = crypto.randomBytes(16).toString("hex");
   const authUrl = authorizeUrl(config, state);
 
+  console.log(`Config source: ${config.source}`);
   console.log(`Starting OAuth for region ${config.region} (${config.regionLabel}).`);
+  console.log(`Using host ${config.host}`);
   console.log(`Waiting for callback on ${config.redirectUri}`);
 
   const callbackPromise = waitForOAuthCallback(config.redirectUri, state);
@@ -143,7 +192,14 @@ async function authLogin() {
   }
 
   const callback = await callbackPromise;
-  const tokenPayload = await exchangeAuthorizationCode(config, callback.code);
+  let tokenPayload;
+
+  try {
+    tokenPayload = await exchangeAuthorizationCode(config, callback.code);
+  } catch (error) {
+    throw rewriteOAuthError(error, config);
+  }
+
   const tokenSet = await saveTokenSet(tokenPayload);
   const accessToken = await getValidAccessToken(config, tokenSet);
   const whoAmI = await fetchWhoAmI(config, accessToken);
@@ -240,10 +296,10 @@ async function whoAmI(options = {}) {
 }
 
 async function setupWizard() {
-  await authSetup({ skipNextStepHint: true });
+  const config = await authSetup({ skipNextStepHint: true });
   console.log("");
   console.log("Continuing with OAuth login...");
-  await authLogin();
+  await authLogin({ config });
 }
 
 async function maybeRunSetupOnFirstUse() {
