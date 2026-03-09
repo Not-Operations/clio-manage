@@ -13,21 +13,25 @@ const REGIONS = {
   us: {
     code: "us",
     label: "United States",
+    developerPortalUrl: "https://developers.clio.com",
     host: "app.clio.com",
   },
   ca: {
     code: "ca",
     label: "Canada",
+    developerPortalUrl: "https://ca.developers.clio.com",
     host: "ca.app.clio.com",
   },
   eu: {
     code: "eu",
     label: "Europe",
+    developerPortalUrl: "https://eu.developers.clio.com",
     host: "eu.app.clio.com",
   },
   au: {
     code: "au",
     label: "Australia",
+    developerPortalUrl: "https://au.developers.clio.com",
     host: "au.app.clio.com",
   },
 };

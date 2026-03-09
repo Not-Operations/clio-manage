@@ -85,8 +85,47 @@ function rewriteOAuthError(error, config) {
   return error;
 }
 
-function printSetupLinks(redirectUri) {
+function printSetupBanner() {
+  console.log("   ____ _ _        __  __                                   ");
+  console.log("  / ___| (_)_ __  |  \\/  | __ _ _ __   __ _  __ _  ___     ");
+  console.log(" | |   | | | '_ \\ | |\\/| |/ _` | '_ \\ / _` |/ _` |/ _ \\    ");
+  console.log(" | |___| | | |_) || |  | | (_| | | | | (_| | (_| |  __/    ");
+  console.log("  \\____|_|_| .__/ |_|  |_|\\__,_|_| |_|\\__,_|\\__, |\\___|    ");
+  console.log("           |_|                               |___/          ");
+}
+
+function printSetupSteps() {
+  console.log("Setup flow:");
+  console.log("  [1] Choose your region");
+  console.log("  [2] Open the regional developer portal when you are ready");
+  console.log("  [3] Connect an existing app or create a new one");
+  console.log("  [4] Paste the App Key and App Secret from that same app");
+  console.log("  [5] Use the default local redirect URI unless you need a custom loopback URL");
+}
+
+async function maybeOpenDeveloperPortal(rl, region) {
+  const regionInfo = REGIONS[region];
+  const promptLabel = "Press Enter to open that page, or type skip to continue without opening";
+  const answer = String(await ask(rl, promptLabel, "")).trim().toLowerCase();
+
+  if (answer === "skip") {
+    console.log("Continuing without opening the browser.");
+    return;
+  }
+
+  try {
+    await openBrowser(regionInfo.developerPortalUrl);
+    console.log(`Opened the ${regionInfo.label} Clio developer portal in your browser.`);
+  } catch (_error) {
+    console.log("Could not open the Clio developer portal automatically.");
+    console.log(`Open this URL manually: ${regionInfo.developerPortalUrl}`);
+  }
+}
+
+function printSetupLinks(region, redirectUri) {
+  const regionInfo = REGIONS[region];
   console.log("Clio setup links:");
+  console.log(`- Developer portal: ${regionInfo.developerPortalUrl}`);
   console.log(`- Developer account guide: ${CLIO_DEVELOPER_ACCOUNT_GUIDE_URL}`);
   console.log(`- App creation guide: ${CLIO_APP_CREATION_GUIDE_URL}`);
   console.log(`- Authorization guide: ${CLIO_AUTHORIZATION_GUIDE_URL}`);
@@ -94,18 +133,25 @@ function printSetupLinks(redirectUri) {
 }
 
 function printSetupIntro(redirectUri) {
-  console.log("Clio local setup");
+  printSetupBanner();
+  console.log("");
+  console.log("+------------------------+");
+  console.log("|  WELCOME TO CLIO MANAGE |");
+  console.log("+------------------------+");
   console.log("");
   console.log("This CLI connects to Clio using your own Clio Developer Application.");
-  console.log("Before you continue, create a Clio app and copy its App Key and App Secret.");
+  console.log("Before you continue, connect an existing app or create a new one.");
+  console.log("");
+  printSetupSteps();
   console.log("");
   console.log("Useful links:");
   console.log(`- Developer account guide: ${CLIO_DEVELOPER_ACCOUNT_GUIDE_URL}`);
   console.log(`- App creation guide: ${CLIO_APP_CREATION_GUIDE_URL}`);
   console.log(`- OAuth guide: ${CLIO_AUTHORIZATION_GUIDE_URL}`);
   console.log("");
-  console.log("You will need to register this redirect URI in your Clio app:");
+  console.log("Default redirect URI to register in your Clio app:");
   console.log(`- ${redirectUri}`);
+  console.log("Press Enter later to keep this default, or paste a custom loopback redirect URI.");
   console.log("");
   console.log("Region options:");
   Object.values(REGIONS).forEach((region) => {
@@ -117,22 +163,15 @@ async function authSetup(options = {}) {
   printSetupIntro(DEFAULT_REDIRECT_URI);
   console.log("");
 
-  if (options.openGuide !== false) {
-    try {
-      await openBrowser(CLIO_APP_CREATION_GUIDE_URL);
-      console.log("Opened the Clio app creation guide in your browser.");
-      console.log("");
-    } catch (_error) {
-      console.log("Could not open the Clio app creation guide automatically.");
-      console.log(`Open this URL manually: ${CLIO_APP_CREATION_GUIDE_URL}`);
-      console.log("");
-    }
-  }
-
   const configInput = await withPrompt(async (rl) => {
     const regionRaw = await ask(rl, "Region", DEFAULT_REGION);
     const region = normalizeRegion(regionRaw);
-    console.log(`Using ${REGIONS[region].label} (${REGIONS[region].host}).`);
+    const regionInfo = REGIONS[region];
+
+    console.log(`Using ${regionInfo.label} (${regionInfo.host}).`);
+    console.log(`Developer portal: ${regionInfo.developerPortalUrl}`);
+    console.log("Use it to connect an existing app or create a new one.");
+    await maybeOpenDeveloperPortal(rl, region);
     console.log("Copy the next two values from the same Clio Developer Application.");
 
     const clientId = await ask(rl, "App Key / Client ID (from your Clio developer app)");
@@ -145,8 +184,11 @@ async function authSetup(options = {}) {
       throw new Error("App Secret / Client Secret is required.");
     }
 
-    const redirectUriRaw = await ask(rl, "Redirect URI", DEFAULT_REDIRECT_URI);
-    const redirectUri = parseRedirectUri(redirectUriRaw);
+    const redirectUriOverride = await ask(
+      rl,
+      "Custom redirect URI (optional; press Enter to use the default above)"
+    );
+    const redirectUri = parseRedirectUri(redirectUriOverride || DEFAULT_REDIRECT_URI);
     return {
       region,
       clientId,
@@ -161,7 +203,7 @@ async function authSetup(options = {}) {
   console.log("");
   console.log("Saved credentials to secure keychain.");
   console.log(`Region: ${saved.region} (${REGIONS[saved.region].label})`);
-  printSetupLinks(saved.redirectUri);
+  printSetupLinks(saved.region, saved.redirectUri);
 
   if (!options.skipNextStepHint) {
     console.log("");

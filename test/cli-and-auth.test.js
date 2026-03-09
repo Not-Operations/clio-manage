@@ -6,8 +6,8 @@ const { captureConsole, loadWithMocks } = require("./helpers/module-test-utils")
 
 const ROOT = path.resolve(__dirname, "..");
 const {
-  CLIO_APP_CREATION_GUIDE_URL,
   DEFAULT_REDIRECT_URI,
+  REGIONS,
 } = require("../src/constants");
 
 function loadCli(authOverrides = {}) {
@@ -437,9 +437,12 @@ test("cli prints help when no args are provided and onboarding is not needed", a
   }
 });
 
-test("authSetup prints credential guidance and opens the Clio app creation guide", async () => {
+test("authSetup opens the selected regional developer portal only after Enter", async () => {
   const authHarness = loadAuthSetupTest((label, fallback) => {
     if (label === "Region") {
+      return "ca";
+    }
+    if (label === "Press Enter to open that page, or type skip to continue without opening") {
       return fallback;
     }
     if (label === "App Key / Client ID (from your Clio developer app)") {
@@ -448,42 +451,84 @@ test("authSetup prints credential guidance and opens the Clio app creation guide
     if (label === "App Secret / Client Secret (from the same Clio app)") {
       return "client-secret";
     }
-    if (label === "Redirect URI") {
-      return fallback;
+    if (label === "Custom redirect URI (optional; press Enter to use the default above)") {
+      return "";
     }
     throw new Error(`Unexpected prompt label: ${label}`);
   });
 
   try {
     const { logs } = await captureConsole(() =>
-      authHarness.module.authSetup({ openGuide: true, skipNextStepHint: true })
+      authHarness.module.authSetup({ skipNextStepHint: true })
     );
     const output = logs.join("\n");
 
     assert.match(output, /This CLI connects to Clio using your own Clio Developer Application/);
-    assert.match(output, /App Key and App Secret/);
-    assert.match(output, /Opened the Clio app creation guide in your browser/);
+    assert.match(output, /WELCOME TO CLIO MANAGE/);
+    assert.match(output, /Setup flow:/);
+    assert.match(output, /connect an existing app or create a new one/i);
+    assert.match(output, /App Key and App Secret from that same app/);
+    assert.match(
+      output,
+      new RegExp(REGIONS.ca.developerPortalUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    );
+    assert.match(output, /Use it to connect an existing app or create a new one/);
+    assert.match(output, /Opened the Canada Clio developer portal in your browser/);
     assert.match(
       output,
       new RegExp(DEFAULT_REDIRECT_URI.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     );
-    assert.deepStrictEqual(authHarness.openCalls, [CLIO_APP_CREATION_GUIDE_URL]);
+    assert.deepStrictEqual(authHarness.openCalls, [REGIONS.ca.developerPortalUrl]);
     assert.deepStrictEqual(
       authHarness.promptLabels.map((entry) => entry.label),
       [
         "Region",
+        "Press Enter to open that page, or type skip to continue without opening",
         "App Key / Client ID (from your Clio developer app)",
         "App Secret / Client Secret (from the same Clio app)",
-        "Redirect URI",
+        "Custom redirect URI (optional; press Enter to use the default above)",
       ]
     );
     assert.deepStrictEqual(authHarness.savedConfig, {
       clientId: "client-id",
       clientSecret: "client-secret",
       redirectUri: DEFAULT_REDIRECT_URI,
-      region: "us",
+      region: "ca",
     });
     assert.equal(authHarness.clearedTokenSet, 1);
+  } finally {
+    authHarness.restore();
+  }
+});
+
+test("authSetup does not open the browser when the user types skip", async () => {
+  const authHarness = loadAuthSetupTest((label, fallback) => {
+    if (label === "Region") {
+      return "ca";
+    }
+    if (label === "Press Enter to open that page, or type skip to continue without opening") {
+      return "skip";
+    }
+    if (label === "App Key / Client ID (from your Clio developer app)") {
+      return "client-id";
+    }
+    if (label === "App Secret / Client Secret (from the same Clio app)") {
+      return "client-secret";
+    }
+    if (label === "Custom redirect URI (optional; press Enter to use the default above)") {
+      return "";
+    }
+    throw new Error(`Unexpected prompt label: ${label}`);
+  });
+
+  try {
+    const { logs } = await captureConsole(() =>
+      authHarness.module.authSetup({ skipNextStepHint: true })
+    );
+    const output = logs.join("\n");
+
+    assert.match(output, /Continuing without opening the browser/);
+    assert.deepStrictEqual(authHarness.openCalls, []);
   } finally {
     authHarness.restore();
   }
@@ -549,14 +594,17 @@ test("setupWizard passes the config it just saved into authLogin", async () => {
         if (label === "Region") {
           return fallback;
         }
+        if (label === "Press Enter to open that page, or type skip to continue without opening") {
+          return "skip";
+        }
         if (label === "App Key / Client ID (from your Clio developer app)") {
           return savedConfig.clientId;
         }
         if (label === "App Secret / Client Secret (from the same Clio app)") {
           return savedConfig.clientSecret;
         }
-        if (label === "Redirect URI") {
-          return fallback;
+        if (label === "Custom redirect URI (optional; press Enter to use the default above)") {
+          return "";
         }
         throw new Error(`Unexpected prompt label: ${label}`);
       },
