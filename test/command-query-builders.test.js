@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+const activities = require("../src/commands-activities");
+const billableClients = require("../src/commands-billable-clients");
+const billableMatters = require("../src/commands-billable-matters");
 const contacts = require("../src/commands-contacts");
 const bills = require("../src/commands-bills");
 const matters = require("../src/commands-matters");
@@ -78,6 +81,48 @@ test("buildBillQuery maps bill filters", () => {
     status: "open",
     type: "Invoice",
     updated_since: "2026-03-05",
+  });
+});
+
+test("buildActivityQuery maps activity filters", () => {
+  const query = activities.__private.buildActivityQuery({
+    activityDescriptionId: "88",
+    createdSince: "2026-03-01T00:00:00Z",
+    endDate: "2026-03-09",
+    flatRate: false,
+    limit: "100",
+    matterId: "15564573",
+    onlyUnaccountedFor: true,
+    order: "date(desc)",
+    pageToken: "cursor-6",
+    query: "CLI LIVE",
+    startDate: "2026-03-01",
+    status: "unbilled",
+    taskId: "99",
+    type: "TimeEntry",
+    updatedSince: "2026-03-09T12:00:00Z",
+    userId: "433452",
+  });
+
+  assert.deepStrictEqual(query, {
+    activity_description_id: "88",
+    created_since: "2026-03-01T00:00:00Z",
+    end_date: "2026-03-09",
+    fields:
+      "id,type,date,quantity,quantity_in_hours,price,total,billed,on_bill,non_billable,note,matter{id,display_number,number,description},user{id,name,first_name,last_name}",
+    flat_rate: false,
+    limit: 100,
+    matter_id: "15564573",
+    only_unaccounted_for: true,
+    order: "date(desc)",
+    page_token: "cursor-6",
+    query: "CLI LIVE",
+    start_date: "2026-03-01",
+    status: "unbilled",
+    task_id: "99",
+    type: "TimeEntry",
+    updated_since: "2026-03-09T12:00:00Z",
+    user_id: "433452",
   });
 });
 
@@ -169,10 +214,67 @@ test("buildPracticeAreaQuery maps supported practice area API filters", () => {
   });
 });
 
+test("buildBillableMatterQuery maps billable matter filters", () => {
+  const query = billableMatters.__private.buildBillableMatterQuery({
+    clientId: "18638250",
+    endDate: "2026-03-09",
+    limit: "250",
+    matterId: "15564573",
+    originatingAttorneyId: "433452",
+    pageToken: "cursor-7",
+    query: "CLI",
+    responsibleAttorneyId: "433452",
+    startDate: "2026-03-01",
+  });
+
+  assert.deepStrictEqual(query, {
+    client_id: "18638250",
+    end_date: "2026-03-09",
+    fields:
+      "id,display_number,unbilled_hours,unbilled_amount,amount_in_trust,client{id,name,first_name,last_name}",
+    limit: 250,
+    matter_id: "15564573",
+    originating_attorney_id: "433452",
+    page_token: "cursor-7",
+    query: "CLI",
+    responsible_attorney_id: "433452",
+    start_date: "2026-03-01",
+  });
+});
+
+test("buildBillableClientQuery maps billable client filters", () => {
+  const query = billableClients.__private.buildBillableClientQuery({
+    clientId: "18638250",
+    endDate: "2026-03-09",
+    limit: "25",
+    matterId: "15564573",
+    originatingAttorneyId: "433452",
+    pageToken: "cursor-8",
+    query: "CLI",
+    responsibleAttorneyId: "433452",
+    startDate: "2026-03-01",
+  });
+
+  assert.deepStrictEqual(query, {
+    client_id: "18638250",
+    end_date: "2026-03-09",
+    fields: "id,name,unbilled_hours,unbilled_amount,amount_in_trust,billable_matters_count",
+    limit: 25,
+    matter_id: "15564573",
+    originating_attorney_id: "433452",
+    page_token: "cursor-8",
+    query: "CLI",
+    responsible_attorney_id: "433452",
+    start_date: "2026-03-01",
+  });
+});
+
 test("query builders fail fast on invalid limits", () => {
   assert.throws(() => contacts.__private.buildContactQuery({ limit: "0" }), /--limit/);
+  assert.throws(() => activities.__private.buildActivityQuery({ limit: "500" }), /--limit/);
   assert.throws(() => bills.__private.buildBillQuery({ limit: "500" }), /--limit/);
   assert.throws(() => users.__private.buildUserQuery({ limit: "2001" }), /--limit/);
+  assert.throws(() => billableClients.__private.buildBillableClientQuery({ limit: "26" }), /--limit/);
 });
 
 test("row formatters normalize common Clio response shapes", () => {
@@ -197,6 +299,29 @@ test("row formatters normalize common Clio response shapes", () => {
   );
 
   assert.deepStrictEqual(
+    activities.__private.formatActivityRow({
+      id: 7,
+      type: "TimeEntry",
+      date: "2026-03-09",
+      quantity: 1800,
+      total: "150",
+      billed: false,
+      matter: { display_number: "MAT-55" },
+      note: "Research",
+    }),
+    {
+      id: "7",
+      type: "TimeEntry",
+      date: "2026-03-09",
+      hours: "0.50",
+      total: "150.00",
+      billed: "no",
+      matter: "MAT-55",
+      note: "Research",
+    }
+  );
+
+  assert.deepStrictEqual(
     bills.__private.formatBillRow({
       id: 2,
       number: "B-100",
@@ -212,6 +337,44 @@ test("row formatters normalize common Clio response shapes", () => {
       client: "Sam Smith",
       dueAt: "2026-03-12",
       balance: "125.50",
+    }
+  );
+
+  assert.deepStrictEqual(
+    billableMatters.__private.formatBillableMatterRow({
+      id: 8,
+      display_number: "MAT-88",
+      client: { name: "Acme LLC" },
+      unbilled_hours: 1.25,
+      unbilled_amount: 500,
+      amount_in_trust: 200,
+    }),
+    {
+      id: "8",
+      matter: "MAT-88",
+      client: "Acme LLC",
+      hours: "1.25",
+      amount: "500.00",
+      trust: "200.00",
+    }
+  );
+
+  assert.deepStrictEqual(
+    billableClients.__private.formatBillableClientRow({
+      id: 9,
+      name: "Acme LLC",
+      unbilled_hours: 2.5,
+      unbilled_amount: 1000,
+      amount_in_trust: 300,
+      billable_matters_count: 2,
+    }),
+    {
+      id: "9",
+      name: "Acme LLC",
+      hours: "2.50",
+      amount: "1000.00",
+      trust: "300.00",
+      matters: "2",
     }
   );
 

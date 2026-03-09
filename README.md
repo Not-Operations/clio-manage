@@ -68,8 +68,13 @@ clio-manage setup
 clio-manage auth setup
 clio-manage auth login
 clio-manage auth status
+clio-manage activities list
+clio-manage activities get 123
 clio-manage contacts list
 clio-manage contacts get 12345
+clio-manage time-entries list
+clio-manage billable-clients list
+clio-manage billable-matters list
 clio-manage bills list
 clio-manage bills get 987
 clio-manage invoices list
@@ -88,6 +93,10 @@ clio-manage auth revoke
 ## Read-only examples
 
 ```bash
+clio-manage activities list --status unbilled --matter-id 456
+clio-manage activities get 123
+clio-manage time-entries list --user-id 88 --start-date 2026-03-01
+
 clio-manage contacts list --query "acme" --client-only
 clio-manage contacts get 12345
 
@@ -104,6 +113,9 @@ clio-manage users get 123
 clio-manage practice-areas list --name "Family"
 clio-manage practice-areas list --matter-id 456
 clio-manage practice-areas get 45
+
+clio-manage billable-matters list --client-id 999
+clio-manage billable-clients list --start-date 2026-03-01
 ```
 
 ## Security model

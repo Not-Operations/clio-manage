@@ -8,6 +8,16 @@ const {
   whoAmI,
 } = require("./commands-auth");
 const { billsGet, billsList } = require("./commands-bills");
+const {
+  activitiesGet,
+  activitiesList,
+} = require("./commands-activities");
+const {
+  billableClientsList,
+} = require("./commands-billable-clients");
+const {
+  billableMattersList,
+} = require("./commands-billable-matters");
 const { contactsGet, contactsList } = require("./commands-contacts");
 const { mattersGet, mattersList } = require("./commands-matters");
 const {
@@ -67,8 +77,14 @@ function printHelp() {
   console.log("  auth login         Run local OAuth login flow");
   console.log("  auth status        Show auth status and connected user");
   console.log("  auth revoke        Revoke token and clear local token storage");
+  console.log("  activities list    List activities with filters and pagination");
+  console.log("  activities get     Fetch a single activity by id");
   console.log("  contacts list      List contacts with filters and pagination");
   console.log("  contacts get       Fetch a single contact by id");
+  console.log("  time-entries list  Alias for activities list filtered to TimeEntry");
+  console.log("  time-entries get   Alias for activities get");
+  console.log("  billable-clients list List clients with unbilled activity");
+  console.log("  billable-matters list List matters with unbilled activity");
   console.log("  bills list         List bills with filters and pagination");
   console.log("  bills get          Fetch a single bill by id");
   console.log("  invoices list      Alias for bills list");
@@ -145,6 +161,49 @@ async function run(args) {
 
   if (command === "whoami") {
     await whoAmI({ json });
+    return;
+  }
+
+  if ((command === "activities" || command === "time-entries") && sub === "list") {
+    await activitiesList({
+      activityDescriptionId:
+        optionValues["activity-description-id"] || optionValues.activity_description_id,
+      all: Boolean(optionValues.all),
+      createdSince: optionValues["created-since"] || optionValues.created_since,
+      endDate: optionValues["end-date"] || optionValues.end_date,
+      fields: optionValues.fields,
+      flatRate:
+        optionValues["flat-rate"] === undefined && optionValues.flat_rate === undefined
+          ? undefined
+          : (optionValues["flat-rate"] || optionValues.flat_rate) !== "false",
+      json,
+      limit: optionValues.limit,
+      matterId: optionValues["matter-id"] || optionValues.matter_id,
+      onlyUnaccountedFor: Boolean(
+        optionValues["only-unaccounted-for"] || optionValues.only_unaccounted_for
+      ),
+      order: optionValues.order,
+      pageToken: optionValues["page-token"] || optionValues.page_token,
+      query: optionValues.query,
+      startDate: optionValues["start-date"] || optionValues.start_date,
+      status: optionValues.status,
+      taskId: optionValues["task-id"] || optionValues.task_id,
+      type:
+        command === "time-entries"
+          ? "TimeEntry"
+          : optionValues.type,
+      updatedSince: optionValues["updated-since"] || optionValues.updated_since,
+      userId: optionValues["user-id"] || optionValues.user_id,
+    });
+    return;
+  }
+
+  if ((command === "activities" || command === "time-entries") && sub === "get") {
+    await activitiesGet({
+      fields: optionValues.fields,
+      id: positional[0],
+      json,
+    });
     return;
   }
 
@@ -304,6 +363,46 @@ async function run(args) {
       fields: optionValues.fields,
       id: positional[0],
       json,
+    });
+    return;
+  }
+
+  if (command === "billable-matters" && sub === "list") {
+    await billableMattersList({
+      all: Boolean(optionValues.all),
+      clientId: optionValues["client-id"] || optionValues.client_id,
+      endDate: optionValues["end-date"] || optionValues.end_date,
+      fields: optionValues.fields,
+      json,
+      limit: optionValues.limit,
+      matterId: optionValues["matter-id"] || optionValues.matter_id,
+      originatingAttorneyId:
+        optionValues["originating-attorney-id"] || optionValues.originating_attorney_id,
+      pageToken: optionValues["page-token"] || optionValues.page_token,
+      query: optionValues.query,
+      responsibleAttorneyId:
+        optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
+      startDate: optionValues["start-date"] || optionValues.start_date,
+    });
+    return;
+  }
+
+  if (command === "billable-clients" && sub === "list") {
+    await billableClientsList({
+      all: Boolean(optionValues.all),
+      clientId: optionValues["client-id"] || optionValues.client_id,
+      endDate: optionValues["end-date"] || optionValues.end_date,
+      fields: optionValues.fields,
+      json,
+      limit: optionValues.limit,
+      matterId: optionValues["matter-id"] || optionValues.matter_id,
+      originatingAttorneyId:
+        optionValues["originating-attorney-id"] || optionValues.originating_attorney_id,
+      pageToken: optionValues["page-token"] || optionValues.page_token,
+      query: optionValues.query,
+      responsibleAttorneyId:
+        optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
+      startDate: optionValues["start-date"] || optionValues.start_date,
     });
     return;
   }

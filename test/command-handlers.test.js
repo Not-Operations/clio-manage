@@ -37,6 +37,46 @@ function loadCommandModule(spec, overrides = {}) {
 
 const specs = [
   {
+    name: "activities",
+    moduleFile: "src/commands-activities.js",
+    listExport: "activitiesList",
+    getExport: "activitiesGet",
+    fetchPageExport: "fetchActivitiesPage",
+    fetchItemExport: "fetchActivity",
+    emptyMessage: "No activities found for the selected filters.",
+    usageMessage: "Usage: clio-manage activities get <id> [--fields ...] [--json]",
+    listOptions: { status: "unbilled", limit: "5" },
+    getId: "11",
+    sample: {
+      id: 11,
+      type: "TimeEntry",
+      date: "2026-03-09",
+      quantity_in_hours: 1.5,
+      price: "200",
+      total: "300",
+      billed: false,
+      on_bill: false,
+      non_billable: false,
+      no_charge: false,
+      flat_rate: false,
+      contingency_fee: false,
+      note: "Draft motion",
+      created_at: "2026-03-09T10:00:00Z",
+      updated_at: "2026-03-09T10:30:00Z",
+      matter: { display_number: "MAT-11" },
+      user: { first_name: "Dana", last_name: "Doyle" },
+      activity_description: { name: "Research" },
+      bill: { number: "INV-11", state: "draft" },
+    },
+    listFragments: ["TimeEntry", "2026-03-09", "1.50", "300.00", "Draft motion"],
+    detailFragments: [
+      "Type                 : TimeEntry",
+      "Hours                : 1.50",
+      "Matter               : MAT-11",
+      "Activity Description : Research",
+    ],
+  },
+  {
     name: "contacts",
     moduleFile: "src/commands-contacts.js",
     listExport: "contactsList",
@@ -446,3 +486,109 @@ test("practice areas list resolves matter ids through the matter detail endpoint
     restore();
   }
 });
+
+const billableSpecs = [
+  {
+    name: "billable matters",
+    moduleFile: "src/commands-billable-matters.js",
+    listExport: "billableMattersList",
+    fetchPageExport: "fetchBillableMattersPage",
+    emptyMessage: "No billable matters found for the selected filters.",
+    listOptions: { limit: "5", query: "CLI" },
+    sample: {
+      id: 700,
+      display_number: "MAT-700",
+      client: { name: "Acme LLC" },
+      unbilled_hours: 1.75,
+      unbilled_amount: 350,
+      amount_in_trust: 50,
+    },
+    listFragments: ["MAT-700", "Acme LLC", "1.75", "350.00", "50.00"],
+  },
+  {
+    name: "billable clients",
+    moduleFile: "src/commands-billable-clients.js",
+    listExport: "billableClientsList",
+    fetchPageExport: "fetchBillableClientsPage",
+    emptyMessage: "No billable clients found for the selected filters.",
+    listOptions: { limit: "5", query: "CLI" },
+    sample: {
+      id: 701,
+      name: "Acme LLC",
+      unbilled_hours: 2.25,
+      unbilled_amount: 450,
+      amount_in_trust: 75,
+      billable_matters_count: 2,
+    },
+    listFragments: ["Acme LLC", "2.25", "450.00", "75.00", "2"],
+  },
+];
+
+for (const spec of billableSpecs) {
+  test(`${spec.name} list prints an empty state and summary`, async () => {
+    const { module, restore } = loadWithMocks(path.join(ROOT, spec.moduleFile), {
+      "./clio-api": {
+        getValidAccessToken: async () => "fresh-token",
+        [spec.fetchPageExport]: async () => buildPage([]),
+      },
+      "./store": {
+        getConfig: async () => BASE_CONFIG,
+        getTokenSet: async () => BASE_TOKEN_SET,
+      },
+    });
+
+    try {
+      const { logs } = await captureConsole(() => module[spec.listExport](spec.listOptions));
+      assert.ok(logs.includes(spec.emptyMessage));
+      assert.ok(logs.some((line) => line.includes("Returned 0")));
+    } finally {
+      restore();
+    }
+  });
+
+  test(`${spec.name} list prints formatted table output`, async () => {
+    const { module, restore } = loadWithMocks(path.join(ROOT, spec.moduleFile), {
+      "./clio-api": {
+        getValidAccessToken: async () => "fresh-token",
+        [spec.fetchPageExport]: async () => buildPage([spec.sample]),
+      },
+      "./store": {
+        getConfig: async () => BASE_CONFIG,
+        getTokenSet: async () => BASE_TOKEN_SET,
+      },
+    });
+
+    try {
+      const { logs } = await captureConsole(() => module[spec.listExport](spec.listOptions));
+      const output = logs.join("\n");
+      spec.listFragments.forEach((fragment) => {
+        assert.match(output, new RegExp(escapeRegExp(fragment)));
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  test(`${spec.name} list supports JSON output`, async () => {
+    const payload = buildPage([spec.sample], "https://next-page.test");
+    const { module, restore } = loadWithMocks(path.join(ROOT, spec.moduleFile), {
+      "./clio-api": {
+        getValidAccessToken: async () => "fresh-token",
+        [spec.fetchPageExport]: async () => payload,
+      },
+      "./store": {
+        getConfig: async () => BASE_CONFIG,
+        getTokenSet: async () => BASE_TOKEN_SET,
+      },
+    });
+
+    try {
+      const { logs } = await captureConsole(() =>
+        module[spec.listExport]({ ...spec.listOptions, json: true })
+      );
+      assert.deepStrictEqual(JSON.parse(logs.join("\n")), payload);
+    } finally {
+      restore();
+    }
+  });
+}

@@ -62,6 +62,38 @@ async function getJson(url, headers = {}) {
   return payload;
 }
 
+async function postJson(url, body, headers = {}) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  let payload = null;
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch (_error) {
+      payload = text;
+    }
+  }
+
+  if (!response.ok) {
+    throw createError(
+      `HTTP ${response.status} from ${url}`,
+      typeof payload === "string" ? payload : JSON.stringify(payload)
+    );
+  }
+
+  return payload;
+}
+
 function authBaseUrl(config) {
   return `https://${config.host}`;
 }
@@ -207,6 +239,17 @@ async function fetchResourceById(config, accessToken, resourcePath, id, query = 
   });
 }
 
+async function createResource(config, accessToken, resourcePath, data, query = {}) {
+  const url = resourceCollectionUrl(config, resourcePath, query);
+  return postJson(
+    url,
+    { data },
+    {
+      authorization: `Bearer ${accessToken}`,
+    }
+  );
+}
+
 async function fetchContactsPage(config, accessToken, query = {}, nextPageUrl = null) {
   return fetchResourcePage(config, accessToken, "contacts", query, nextPageUrl);
 }
@@ -247,11 +290,46 @@ async function fetchPracticeArea(config, accessToken, id, query = {}) {
   return fetchResourceById(config, accessToken, "practice_areas", id, query);
 }
 
+async function fetchActivitiesPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "activities", query, nextPageUrl);
+}
+
+async function fetchActivity(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "activities", id, query);
+}
+
+async function createActivity(config, accessToken, data, query = {}) {
+  return createResource(config, accessToken, "activities", data, query);
+}
+
+async function fetchBillableMattersPage(
+  config,
+  accessToken,
+  query = {},
+  nextPageUrl = null
+) {
+  return fetchResourcePage(config, accessToken, "billable_matters", query, nextPageUrl);
+}
+
+async function fetchBillableClientsPage(
+  config,
+  accessToken,
+  query = {},
+  nextPageUrl = null
+) {
+  return fetchResourcePage(config, accessToken, "billable_clients", query, nextPageUrl);
+}
+
 module.exports = {
   authorizeUrl,
+  createActivity,
   deauthorize,
   exchangeAuthorizationCode,
+  fetchActivitiesPage,
+  fetchActivity,
   fetchBill,
+  fetchBillableClientsPage,
+  fetchBillableMattersPage,
   fetchBillsPage,
   fetchContact,
   fetchContactsPage,

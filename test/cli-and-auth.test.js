@@ -12,7 +12,11 @@ const {
 
 function loadCli(authOverrides = {}) {
   const calls = {
+    activitiesGet: [],
+    activitiesList: [],
     billsList: [],
+    billableClientsList: [],
+    billableMattersList: [],
     contactsList: [],
     mattersList: [],
     maybeRunSetupOnFirstUse: 0,
@@ -21,6 +25,14 @@ function loadCli(authOverrides = {}) {
   };
 
   const { module, restore } = loadWithMocks(path.join(ROOT, "src/cli.js"), {
+    "./commands-activities": {
+      activitiesGet: async (options) => {
+        calls.activitiesGet.push(options);
+      },
+      activitiesList: async (options) => {
+        calls.activitiesList.push(options);
+      },
+    },
     "./commands-auth": {
       authLogin: async () => {},
       authRevoke: async () => {},
@@ -38,6 +50,16 @@ function loadCli(authOverrides = {}) {
       billsGet: async () => {},
       billsList: async (options) => {
         calls.billsList.push(options);
+      },
+    },
+    "./commands-billable-clients": {
+      billableClientsList: async (options) => {
+        calls.billableClientsList.push(options);
+      },
+    },
+    "./commands-billable-matters": {
+      billableMattersList: async (options) => {
+        calls.billableMattersList.push(options);
       },
     },
     "./commands-contacts": {
@@ -250,6 +272,70 @@ test("cli routes invoices list to billsList and preserves hyphenated flags", asy
   }
 });
 
+test("cli routes time-entries list to activitiesList with a fixed TimeEntry type", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    await run([
+      "time-entries",
+      "list",
+      "--matter-id",
+      "15564573",
+      "--user-id",
+      "433452",
+      "--start-date",
+      "2026-03-01",
+      "--status",
+      "unbilled",
+      "--json",
+    ]);
+
+    assert.deepStrictEqual(calls.activitiesList, [
+      {
+        activityDescriptionId: undefined,
+        all: false,
+        createdSince: undefined,
+        endDate: undefined,
+        fields: undefined,
+        flatRate: undefined,
+        json: true,
+        limit: undefined,
+        matterId: "15564573",
+        onlyUnaccountedFor: false,
+        order: undefined,
+        pageToken: undefined,
+        query: undefined,
+        startDate: "2026-03-01",
+        status: "unbilled",
+        taskId: undefined,
+        type: "TimeEntry",
+        updatedSince: undefined,
+        userId: "433452",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("cli routes activities get", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    await run(["activities", "get", "9001", "--fields", "id,type", "--json"]);
+
+    assert.deepStrictEqual(calls.activitiesGet, [
+      {
+        fields: "id,type",
+        id: "9001",
+        json: true,
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
 test("cli routes contacts list booleans and hyphenated flags", async () => {
   const { calls, restore, run } = loadCli();
 
@@ -403,6 +489,82 @@ test("cli routes practice area list filters", async () => {
         order: undefined,
         pageToken: undefined,
         updatedSince: undefined,
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("cli routes billable matter list filters", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    await run([
+      "billable-matters",
+      "list",
+      "--client-id",
+      "18638250",
+      "--responsible-attorney-id",
+      "433452",
+      "--start-date",
+      "2026-03-01",
+      "--end-date",
+      "2026-03-09",
+      "--all",
+    ]);
+
+    assert.deepStrictEqual(calls.billableMattersList, [
+      {
+        all: true,
+        clientId: "18638250",
+        endDate: "2026-03-09",
+        fields: undefined,
+        json: false,
+        limit: undefined,
+        matterId: undefined,
+        originatingAttorneyId: undefined,
+        pageToken: undefined,
+        query: undefined,
+        responsibleAttorneyId: "433452",
+        startDate: "2026-03-01",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("cli routes billable client list filters", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    await run([
+      "billable-clients",
+      "list",
+      "--matter-id",
+      "15564573",
+      "--originating-attorney-id",
+      "433452",
+      "--page-token",
+      "cursor-7",
+      "--json",
+    ]);
+
+    assert.deepStrictEqual(calls.billableClientsList, [
+      {
+        all: false,
+        clientId: undefined,
+        endDate: undefined,
+        fields: undefined,
+        json: true,
+        limit: undefined,
+        matterId: "15564573",
+        originatingAttorneyId: "433452",
+        pageToken: "cursor-7",
+        query: undefined,
+        responsibleAttorneyId: undefined,
+        startDate: undefined,
       },
     ]);
   } finally {
