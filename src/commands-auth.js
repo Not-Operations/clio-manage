@@ -17,7 +17,7 @@ const {
 } = require("./clio-api");
 const { openBrowser } = require("./open-browser");
 const { waitForOAuthCallback } = require("./oauth-callback");
-const { ask, withPrompt } = require("./prompt");
+const { ask, askSecret, withPrompt } = require("./prompt");
 const {
   clearTokenSet,
   findConfig,
@@ -112,6 +112,24 @@ function rewriteOAuthError(error, config) {
   return error;
 }
 
+function collectSecurityWarnings(config, tokenSet) {
+  const warnings = [];
+
+  if (config?.source === "env") {
+    warnings.push(
+      "App credentials are loaded from environment variables. Prefer the OS keychain on shared or monitored machines."
+    );
+  }
+
+  if (tokenSet?.source === "env") {
+    warnings.push(
+      "OAuth tokens are loaded from environment variables. Prefer keychain-backed login so tokens can be rotated and cleared locally."
+    );
+  }
+
+  return warnings;
+}
+
 function printSetupBanner() {
   console.log("+===========================================+");
   console.log("|           WELCOME TO CLIO MANAGE          |");
@@ -203,7 +221,10 @@ async function authSetup(options = {}) {
       throw new Error("App Key / Client ID is required.");
     }
 
-    const clientSecret = await ask(rl, "App Secret / Client Secret (from the same Clio app)");
+    const clientSecret = await askSecret(
+      rl,
+      "App Secret / Client Secret (from the same Clio app)"
+    );
     if (!clientSecret) {
       throw new Error("App Secret / Client Secret is required.");
     }
@@ -289,6 +310,7 @@ async function authStatus(options = {}) {
 
   const accessToken = await getValidAccessToken(config, tokenSet);
   const { user } = await fetchCurrentUserSummary(config, accessToken);
+  const warnings = collectSecurityWarnings(config, tokenSet);
 
   if (options.json) {
     console.log(
@@ -313,6 +335,9 @@ async function authStatus(options = {}) {
   console.log(`Host: ${config.host}`);
   console.log(`Login status: connected`);
   console.log(`Connected user: ${user.name} <${user.email}> (id: ${user.id})`);
+  warnings.forEach((warning) => {
+    console.log(`Security warning: ${warning}`);
+  });
 }
 
 async function authRevoke() {
@@ -391,6 +416,7 @@ module.exports = {
   setupWizard,
   whoAmI,
   __private: {
+    collectSecurityWarnings,
     fetchCurrentUserSummary,
     formatUserSummary,
     hydrateUserSummary,

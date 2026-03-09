@@ -102,6 +102,37 @@ function apiBaseUrl(config) {
   return `${authBaseUrl(config)}/api/v4`;
 }
 
+function parseTrustedApiUrl(config, url, expectedPathPrefix = "/api/v4/") {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (_error) {
+    throw new Error(`Received an invalid URL from Clio: ${url}`);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error(`Refusing to call a non-HTTPS URL returned by Clio: ${url}`);
+  }
+
+  if (parsed.hostname !== config.host) {
+    throw new Error(
+      `Refusing to send Clio credentials to an unexpected host: ${parsed.hostname}`
+    );
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error("Refusing to use a Clio URL that contains embedded credentials.");
+  }
+
+  if (expectedPathPrefix && !parsed.pathname.startsWith(expectedPathPrefix)) {
+    throw new Error(
+      `Refusing to call an unexpected Clio API path: ${parsed.pathname}`
+    );
+  }
+
+  return parsed.toString();
+}
+
 function buildUrlWithQuery(baseUrl, query = {}) {
   const url = new URL(baseUrl);
 
@@ -226,7 +257,9 @@ async function fetchResourcePage(
   query = {},
   nextPageUrl = null
 ) {
-  const url = nextPageUrl || resourceCollectionUrl(config, resourcePath, query);
+  const url = nextPageUrl
+    ? parseTrustedApiUrl(config, nextPageUrl)
+    : resourceCollectionUrl(config, resourcePath, query);
   return getJson(url, {
     authorization: `Bearer ${accessToken}`,
   });
@@ -341,4 +374,7 @@ module.exports = {
   fetchUsersPage,
   fetchWhoAmI,
   getValidAccessToken,
+  __private: {
+    parseTrustedApiUrl,
+  },
 };

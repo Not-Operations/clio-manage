@@ -124,8 +124,20 @@ clio-manage billable-clients list --start-date 2026-03-01
 ## Security model
 
 - Default storage is OS keychain (`macOS Keychain`, `Windows Credential Manager`, `Linux Secret Service`).
-- `CLIO_*` env vars are supported for power users and automation.
+- Setup masks the App Secret when you type it in the terminal.
+- Local OAuth redirects are restricted to loopback HTTP callbacks such as `http://127.0.0.1:53123/callback`.
+- API pagination links are validated before the CLI sends a bearer token to them.
+- `CLIO_*` env vars are supported for power users and automation, but are less safe than the OS keychain on shared or monitored machines.
 - Tokens are never written to plaintext files by default.
+- Command output can contain sensitive client and matter data, so avoid shell logging, screen sharing, or pasting raw output into tickets and chats.
+
+## Repository hardening
+
+- GitHub Actions runs CI on pull requests and default-branch pushes across supported Node versions.
+- Dependency Review blocks high-severity dependency additions in pull requests.
+- CodeQL runs on pull requests, default-branch pushes, and a weekly schedule.
+- Dependabot is configured for both npm dependencies and GitHub Actions.
+- npm release publishing is set up for provenance-backed publishes from GitHub Actions and expects an `NPM_TOKEN` secret in the `npm` environment.
 
 ## Env vars (optional)
 
@@ -140,6 +152,7 @@ clio-manage billable-clients list --start-date 2026-03-01
 ## Troubleshooting
 
 - `OS keychain ... failed`: run with `CLIO_*` env vars as fallback, or re-enable your OS keychain service.
+- `Redirect URI must use ... loopback ...`: this CLI only supports local loopback OAuth callbacks. Use `http://127.0.0.1:<port>/callback` or `http://localhost:<port>/callback`.
 - `403 Forbidden`: confirm your Clio app has the relevant Clio permissions for Contacts, Matters, Bills, Users, or Practice Areas, then re-authorize.
 - `401 Unauthorized`: run `clio-manage auth login` again.
 

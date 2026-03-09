@@ -27,4 +27,11 @@ Security issues include, for example:
 - OAuth redirect or callback vulnerabilities
 - token leakage or insecure token storage
 - command output that exposes secrets or client data
+- terminal prompts or logs that echo app secrets, access tokens, or refresh tokens
+- pagination or follow-up requests that could leak bearer tokens to non-Clio hosts
 - dependency or update paths that enable credential theft
+
+## Repository controls
+
+Maintain branch protection on the default branch so merges require the `CI`, `Dependency Review`, and `CodeQL` checks to pass.
+For releases, publish through the GitHub Actions release workflow so npm provenance is attached to the package.

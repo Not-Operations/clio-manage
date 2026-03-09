@@ -1,38 +1,37 @@
 const http = require("node:http");
+const crypto = require("node:crypto");
 const { OAUTH_TIMEOUT_MS } = require("./constants");
+const {
+  getLoopbackBindHost,
+  parseLoopbackRedirectUri,
+} = require("./redirect-uri");
 
-function isLoopbackHost(hostname) {
-  return hostname === "127.0.0.1" || hostname === "localhost";
+function writeTextResponse(res, statusCode, body, contentType = "text/plain; charset=utf-8") {
+  res.statusCode = statusCode;
+  res.setHeader("cache-control", "no-store, max-age=0");
+  res.setHeader("pragma", "no-cache");
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("content-type", contentType);
+  res.end(body);
 }
 
-function parseLoopbackRedirect(redirectUri) {
-  let parsed;
-  try {
-    parsed = new URL(redirectUri);
-  } catch (_error) {
-    throw new Error("Redirect URI is not a valid URL.");
+function stateMatches(expectedState, state) {
+  if (!expectedState || !state) {
+    return false;
   }
 
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Redirect URI must use http:// or https://.");
+  const expected = Buffer.from(String(expectedState));
+  const actual = Buffer.from(String(state));
+  if (expected.length !== actual.length) {
+    return false;
   }
 
-  if (!isLoopbackHost(parsed.hostname)) {
-    throw new Error(
-      "Local login requires a loopback redirect URI (127.0.0.1 or localhost)."
-    );
-  }
-
-  if (!parsed.port) {
-    throw new Error("Redirect URI must include an explicit port for local login.");
-  }
-
-  return parsed;
+  return crypto.timingSafeEqual(expected, actual);
 }
 
 function waitForOAuthCallback(redirectUri, expectedState) {
-  const redirect = parseLoopbackRedirect(redirectUri);
-  const hostname = redirect.hostname;
+  const redirect = parseLoopbackRedirectUri(redirectUri);
+  const hostname = getLoopbackBindHost(redirect.hostname);
   const port = Number(redirect.port);
   const path = redirect.pathname || "/";
 
@@ -45,8 +44,7 @@ function waitForOAuthCallback(redirectUri, expectedState) {
     const server = http.createServer((req, res) => {
       const reqUrl = new URL(req.url || "/", `http://${hostname}:${port}`);
       if (reqUrl.pathname !== path) {
-        res.statusCode = 404;
-        res.end("Not found");
+        writeTextResponse(res, 404, "Not found");
         return;
       }
 
@@ -56,8 +54,7 @@ function waitForOAuthCallback(redirectUri, expectedState) {
       const errorDescription = reqUrl.searchParams.get("error_description");
 
       if (error) {
-        res.statusCode = 400;
-        res.end("Clio authorization failed. You can close this window.");
+        writeTextResponse(res, 400, "Clio authorization failed. You can close this window.");
         clearTimeout(timeoutId);
         server.close();
         reject(
@@ -69,27 +66,26 @@ function waitForOAuthCallback(redirectUri, expectedState) {
       }
 
       if (!code) {
-        res.statusCode = 400;
-        res.end("Missing authorization code. You can close this window.");
+        writeTextResponse(res, 400, "Missing authorization code. You can close this window.");
         clearTimeout(timeoutId);
         server.close();
         reject(new Error("OAuth callback did not include an authorization code."));
         return;
       }
 
-      if (!state || state !== expectedState) {
-        res.statusCode = 400;
-        res.end("Invalid state. You can close this window.");
+      if (!stateMatches(expectedState, state)) {
+        writeTextResponse(res, 400, "Invalid state. You can close this window.");
         clearTimeout(timeoutId);
         server.close();
         reject(new Error("State validation failed for OAuth callback."));
         return;
       }
 
-      res.statusCode = 200;
-      res.setHeader("content-type", "text/html; charset=utf-8");
-      res.end(
-        "<html><body><h3>Clio auth complete</h3><p>You can close this tab and return to the terminal.</p></body></html>"
+      writeTextResponse(
+        res,
+        200,
+        "<html><body><h3>Clio auth complete</h3><p>You can close this tab and return to the terminal.</p></body></html>",
+        "text/html; charset=utf-8"
       );
 
       clearTimeout(timeoutId);

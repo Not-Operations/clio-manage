@@ -30,7 +30,7 @@ The full certificate text is in `DCO`.
 
 ```bash
 npm install
-npm test
+npm run check
 ```
 
 ## Pull requests
@@ -39,3 +39,4 @@ npm test
 - Add or update tests when behavior changes.
 - Do not include real client data, real tokens, or secrets in code, fixtures, screenshots, or issue threads.
 - For security-sensitive issues, follow `SECURITY.md` instead of opening a public issue with full details.
+- Pull requests should pass `CI`, `Dependency Review`, and `CodeQL` before merge.

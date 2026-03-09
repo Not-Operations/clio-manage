@@ -1,3 +1,9 @@
 node_modules/
 .env
+.env.*
+!.env.example
+.npmrc
 .DS_Store
+*.key
+*.pem
+*.p12

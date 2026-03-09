@@ -120,6 +120,10 @@ function loadAuthSetupTest(askImpl) {
         promptLabels.push({ fallback, label });
         return askImpl(label, fallback);
       },
+      askSecret: async (_rl, label) => {
+        promptLabels.push({ fallback: null, label });
+        return askImpl(label, null);
+      },
     },
     "./store": {
       clearTokenSet: async () => {
@@ -185,9 +189,27 @@ function loadAuthModule(options = {}) {
       waitForOAuthCallback: async () => ({ code: "auth-code", state: "state-1" }),
     },
     "./prompt": {
-      ask: async () => null,
+      ask: async (...args) => {
+        if (promptOverrides.ask) {
+          return promptOverrides.ask(...args);
+        }
+        return null;
+      },
+      askSecret: async (...args) => {
+        if (promptOverrides.askSecret) {
+          return promptOverrides.askSecret(...args);
+        }
+        if (promptOverrides.ask) {
+          return promptOverrides.ask(...args);
+        }
+        return null;
+      },
       withPrompt: async (callback) => callback({}),
-      ...promptOverrides,
+      ...Object.fromEntries(
+        Object.entries(promptOverrides).filter(
+          ([key]) => key !== "ask" && key !== "askSecret"
+        )
+      ),
     },
     "./store": {
       clearTokenSet: async () => {},
@@ -226,6 +248,71 @@ function loadClioApi(storeOverrides = {}) {
     },
   });
 }
+
+test("parseRedirectUri only accepts loopback http callback URLs", () => {
+  const { parseRedirectUri } = require("../src/store");
+
+  assert.equal(
+    parseRedirectUri("http://127.0.0.1:53123/callback"),
+    "http://127.0.0.1:53123/callback"
+  );
+  assert.equal(
+    parseRedirectUri("http://localhost:53123/callback"),
+    "http://localhost:53123/callback"
+  );
+  assert.throws(
+    () => parseRedirectUri("https://127.0.0.1:53123/callback"),
+    /must use http:\/\//
+  );
+  assert.throws(
+    () => parseRedirectUri("http://example.com:53123/callback"),
+    /must use a loopback host/
+  );
+  assert.throws(
+    () => parseRedirectUri("http://127.0.0.1/callback"),
+    /must include an explicit port/
+  );
+  assert.throws(
+    () => parseRedirectUri("http://127.0.0.1:53123/callback\?state=abc"),
+    /must not include query parameters or fragments/
+  );
+});
+
+test("parseTrustedApiUrl rejects pagination links outside the configured Clio host", () => {
+  const clioApi = require("../src/clio-api");
+
+  assert.equal(
+    clioApi.__private.parseTrustedApiUrl(
+      { host: "app.clio.com" },
+      "https://app.clio.com/api/v4/contacts.json?page_token=abc"
+    ),
+    "https://app.clio.com/api/v4/contacts.json?page_token=abc"
+  );
+  assert.throws(
+    () =>
+      clioApi.__private.parseTrustedApiUrl(
+        { host: "app.clio.com" },
+        "https://evil.example/api/v4/contacts.json?page_token=abc"
+      ),
+    /unexpected host/
+  );
+  assert.throws(
+    () =>
+      clioApi.__private.parseTrustedApiUrl(
+        { host: "app.clio.com" },
+        "http://app.clio.com/api/v4/contacts.json?page_token=abc"
+      ),
+    /non-HTTPS/
+  );
+  assert.throws(
+    () =>
+      clioApi.__private.parseTrustedApiUrl(
+        { host: "app.clio.com" },
+        "https://app.clio.com/oauth/token"
+      ),
+    /unexpected Clio API path/
+  );
+});
 
 test("cli routes invoices list to billsList and preserves hyphenated flags", async () => {
   const { calls, restore, run } = loadCli();
