@@ -13,11 +13,17 @@ This project is a terminal CLI from Not Operations. It is not a Clio product, an
 ## Install
 
 ```bash
-npm i -g clio-manage
+npm i -g clio-manage && clio-manage
 ```
 
-On a fresh interactive global install, the package offers guided setup immediately from `npm install`.
-If you skip that prompt, run:
+This is the recommended install flow because npm does not always show postinstall output consistently.
+
+What happens next:
+
+- first-time setup: `clio-manage` starts guided setup
+- returning setup: `clio-manage` opens normally and can verify the saved connection
+
+You can also run the command separately after install:
 
 ```bash
 clio-manage
@@ -32,7 +38,7 @@ clio-manage setup
 To suppress the install-time prompt entirely:
 
 ```bash
-CLIO_MANAGE_SKIP_POSTINSTALL_SETUP=1 npm i -g clio-manage
+CLIO_MANAGE_SKIP_POSTINSTALL_SETUP=1 npm i -g clio-manage && clio-manage
 ```
 
 For local development:
