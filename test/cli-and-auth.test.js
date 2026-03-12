@@ -704,7 +704,10 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     if (label === "Region") {
       return "ca";
     }
-    if (label === "Press Enter to open the developer portal now, or type skip to continue here") {
+    if (
+      label ===
+      "Press Enter to open the developer portal now so you can sign in, or type skip to continue here"
+    ) {
       return fallback;
     }
     if (label === "App Key / Client ID (from your Clio developer app)") {
@@ -729,11 +732,11 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     assert.match(output, /If this is your first time doing that, this guide will walk you through it/);
     assert.match(output, /WELCOME TO CLIO MANAGE/);
     assert.match(output, /Setup flow:/);
-    assert.match(output, /Use an existing developer app, or create a new one if you do not have one yet/);
+    assert.match(output, /Open your Clio developer app, or create one if you do not have one yet/);
     assert.match(output, /Clio app form guide:/);
     assert.match(output, /Website URL \(required\): use your firm website, company site, or GitHub repo/);
     assert.match(output, /Do not put the local callback URL in Website URL/);
-    assert.match(output, /Redirect URIs \(required\): add this exact URL on its own line/);
+    assert.match(output, /Redirect URIs \(required\): copy this exact URL on its own line/);
     assert.match(output, /You do not need to paste the redirect URI back into this CLI unless you want to override it/);
     assert.match(
       output,
@@ -741,6 +744,9 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     );
     assert.match(output, /If you already have a Clio developer app in this region, you can use it/);
     assert.match(output, /Opened the Canada Clio developer portal in your browser/);
+    assert.match(output, /Sign in to the developer portal if needed/);
+    assert.match(output, /Open your app there, or create one there first/);
+    assert.match(output, /Then copy the App Key and App Secret from that same Clio developer app back here/);
     assert.match(
       output,
       new RegExp(DEFAULT_REDIRECT_URI.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -750,7 +756,7 @@ test("authSetup opens the selected regional developer portal only after Enter", 
       authHarness.promptLabels.map((entry) => entry.label),
       [
         "Region",
-        "Press Enter to open the developer portal now, or type skip to continue here",
+        "Press Enter to open the developer portal now so you can sign in, or type skip to continue here",
         "App Key / Client ID (from your Clio developer app)",
         "App Secret / Client Secret (from the same Clio app)",
         "Custom redirect URI override (optional; press Enter to keep the default)",
@@ -773,7 +779,10 @@ test("authSetup does not open the browser when the user types skip", async () =>
     if (label === "Region") {
       return "ca";
     }
-    if (label === "Press Enter to open the developer portal now, or type skip to continue here") {
+    if (
+      label ===
+      "Press Enter to open the developer portal now so you can sign in, or type skip to continue here"
+    ) {
       return "skip";
     }
     if (label === "App Key / Client ID (from your Clio developer app)") {
@@ -861,7 +870,10 @@ test("setupWizard passes the config it just saved into authLogin", async () => {
         if (label === "Region") {
           return fallback;
         }
-        if (label === "Press Enter to open the developer portal now, or type skip to continue here") {
+        if (
+          label ===
+          "Press Enter to open the developer portal now so you can sign in, or type skip to continue here"
+        ) {
           return "skip";
         }
         if (label === "App Key / Client ID (from your Clio developer app)") {

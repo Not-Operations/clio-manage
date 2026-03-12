@@ -141,15 +141,16 @@ function printSetupBanner() {
 function printSetupSteps() {
   console.log("Setup flow:");
   console.log("  [1] Choose your Clio region");
-  console.log("  [2] Open the Clio developer portal for that region");
-  console.log("  [3] Use an existing developer app, or create a new one if you do not have one yet");
-  console.log("  [4] Copy the App Key and App Secret from that same app");
-  console.log("  [5] Keep the default local redirect URI unless you already know you need a custom loopback URL");
+  console.log("  [2] Open the Clio developer portal for that region and sign in");
+  console.log("  [3] Open your Clio developer app, or create one if you do not have one yet");
+  console.log("  [4] Copy the local callback URL into Redirect URIs in that app");
+  console.log("  [5] Copy the App Key and App Secret from that same app back into this CLI");
 }
 
 async function maybeOpenDeveloperPortal(rl, region) {
   const regionInfo = REGIONS[region];
-  const promptLabel = "Press Enter to open the developer portal now, or type skip to continue here";
+  const promptLabel =
+    "Press Enter to open the developer portal now so you can sign in, or type skip to continue here";
   const answer = String(await ask(rl, promptLabel, "")).trim().toLowerCase();
 
   if (answer === "skip") {
@@ -180,7 +181,7 @@ function printClioAppFieldGuide(redirectUri) {
   console.log("Clio app form guide:");
   console.log("  Website URL (required): use your firm website, company site, or GitHub repo.");
   console.log("  Do not put the local callback URL in Website URL.");
-  console.log("  Redirect URIs (required): add this exact URL on its own line:");
+  console.log("  Redirect URIs (required): copy this exact URL on its own line:");
   console.log(`  - ${redirectUri}`);
   console.log("  Support URL and Deauthorization callback URL can be left blank unless you already use them.");
 }
@@ -221,8 +222,10 @@ async function authSetup(options = {}) {
     console.log("If you already have a Clio developer app in this region, you can use it.");
     console.log("If not, create one there first, then come back here.");
     await maybeOpenDeveloperPortal(rl, region);
+    console.log("Sign in to the developer portal if needed.");
+    console.log("Open your app there, or create one there first.");
     printClioAppFieldGuide(DEFAULT_REDIRECT_URI);
-    console.log("Next, copy the App Key and App Secret from that same Clio developer app.");
+    console.log("Then copy the App Key and App Secret from that same Clio developer app back here.");
 
     const clientId = await ask(rl, "App Key / Client ID (from your Clio developer app)");
     if (!clientId) {

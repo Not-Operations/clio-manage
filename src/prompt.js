@@ -16,7 +16,7 @@ class PromptOutput extends Writable {
       return;
     }
 
-    const text = typeof chunk === "string" ? chunk : chunk.toString(encoding);
+    const text = decodePromptChunk(chunk, encoding);
     if (text === "\n" || text === "\r\n") {
       this.target.write(chunk, encoding);
     }
@@ -27,6 +27,18 @@ class PromptOutput extends Writable {
   writeVisible(text) {
     this.target.write(text);
   }
+}
+
+function decodePromptChunk(chunk, encoding) {
+  if (typeof chunk === "string") {
+    return chunk;
+  }
+
+  if (encoding && encoding !== "buffer") {
+    return chunk.toString(encoding);
+  }
+
+  return chunk.toString();
 }
 
 async function withPrompt(callback) {
@@ -74,7 +86,9 @@ async function askSecret(rl, label) {
 }
 
 module.exports = {
+  PromptOutput,
   ask,
   askSecret,
+  decodePromptChunk,
   withPrompt,
 };
