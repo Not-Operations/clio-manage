@@ -28,6 +28,20 @@ const {
 const { usersGet, usersList } = require("./commands-users");
 const { version } = require("../package.json");
 
+const COMMAND_ALIASES = {
+  activity: "activities",
+  bill: "bills",
+  "billable-client": "billable-clients",
+  "billable-matter": "billable-matters",
+  contact: "contacts",
+  invoice: "invoices",
+  matter: "matters",
+  "practice-area": "practice-areas",
+  task: "tasks",
+  "time-entry": "time-entries",
+  user: "users",
+};
+
 function hasFlag(args, ...flags) {
   return flags.some((flag) => args.includes(flag));
 }
@@ -66,6 +80,10 @@ function parseOptions(args) {
   return { parsed, positional };
 }
 
+function normalizeCommand(command) {
+  return COMMAND_ALIASES[command] || command;
+}
+
 function printHelp() {
   console.log("clio-manage");
   console.log("");
@@ -100,6 +118,10 @@ function printHelp() {
   console.log("  practice-areas get  Fetch a single practice area by id");
   console.log("  whoami             Call /api/v4/users/who_am_i");
   console.log("");
+  console.log("Aliases:");
+  console.log("  Singular aliases are accepted, for example:");
+  console.log("  contact get, matter get, bill get, invoice get, task get, user get");
+  console.log("");
   console.log("Options:");
   console.log("  --json             Print machine-readable JSON for supported commands");
   console.log("  --redacted         Redact client/contact PII from output for safe sharing");
@@ -131,7 +153,7 @@ async function run(args) {
   }
 
   const json = hasFlag(args, "--json");
-  const command = args[0];
+  const command = normalizeCommand(args[0]);
   const sub = args[1];
   const optionTokens = args.slice(2);
   const parsedOptions = parseOptions(optionTokens);

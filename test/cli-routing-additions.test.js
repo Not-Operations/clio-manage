@@ -9,6 +9,8 @@ const ROOT = path.resolve(__dirname, "..");
 function loadCli() {
   const calls = {
     activitiesList: [],
+    billsGet: [],
+    contactsGet: [],
     tasksGet: [],
     tasksList: [],
   };
@@ -30,7 +32,9 @@ function loadCli() {
       whoAmI: async () => {},
     },
     "./commands-bills": {
-      billsGet: async () => {},
+      billsGet: async (options) => {
+        calls.billsGet.push(options);
+      },
       billsList: async () => {},
     },
     "./commands-billable-clients": {
@@ -40,7 +44,9 @@ function loadCli() {
       billableMattersList: async () => {},
     },
     "./commands-contacts": {
-      contactsGet: async () => {},
+      contactsGet: async (options) => {
+        calls.contactsGet.push(options);
+      },
       contactsList: async () => {},
     },
     "./commands-matters": {
@@ -172,6 +178,44 @@ test("cli routes tasks get", async () => {
         id: "789",
         json: false,
         redacted: true,
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("cli accepts singular aliases for contact get", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    await run(["contact", "get", "12345", "--json"]);
+
+    assert.deepStrictEqual(calls.contactsGet, [
+      {
+        fields: undefined,
+        id: "12345",
+        json: true,
+        redacted: false,
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("cli accepts singular aliases for bill get", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    await run(["bill", "get", "987"]);
+
+    assert.deepStrictEqual(calls.billsGet, [
+      {
+        fields: undefined,
+        id: "987",
+        json: false,
+        redacted: false,
       },
     ]);
   } finally {

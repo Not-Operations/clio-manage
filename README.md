@@ -87,64 +87,67 @@ clio-manage auth setup
 clio-manage auth login
 clio-manage auth status
 clio-manage activities list
-clio-manage activities get 123
+clio-manage activity get 123
 clio-manage tasks list
-clio-manage tasks get 789
+clio-manage task get 789
 clio-manage contacts list
-clio-manage contacts get 12345
+clio-manage contact get 12345
 clio-manage time-entries list
 clio-manage billable-clients list
 clio-manage billable-matters list
 clio-manage bills list
-clio-manage bills get 987
+clio-manage bill get 987
 clio-manage invoices list
 clio-manage matters list
-clio-manage matters get 456
+clio-manage matter get 456
 clio-manage users list
-clio-manage users get 123
+clio-manage user get 123
 clio-manage practice-areas list
-clio-manage practice-areas get 45
+clio-manage practice-area get 45
 clio-manage matters list --status open --limit 50
 clio-manage matters list --all --json
 clio-manage whoami
 clio-manage auth revoke
 ```
 
+Plural commands still work. Singular aliases are accepted for the single-record flows so `contact get 12345` and `contacts get 12345` both work.
+
 ## Read-only examples
 
 ```bash
 clio-manage activities list --status unbilled --matter-id 456
 clio-manage activities list --client-id 999 --all
-clio-manage activities get 123
+clio-manage activity get 123
 clio-manage time-entries list --user-id 88 --start-date 2026-03-01
 
 clio-manage tasks list
 clio-manage tasks list --matter-id 456
 clio-manage tasks list --client-id 999 --complete false
-clio-manage tasks get 789
+clio-manage task get 789
 
 clio-manage contacts list --query "acme" --client-only
-clio-manage contacts get 12345
+clio-manage contact get 12345
 
 clio-manage matters list --status open --client-id 999
-clio-manage matters get 456
+clio-manage matter get 456
 
 clio-manage bills list --overdue-only --client-id 999
 clio-manage bills list --matter-id 456
-clio-manage bills get 987
+clio-manage bill get 987
 clio-manage invoices list --state awaiting_payment
 clio-manage invoices list --matter-id 456
+clio-manage invoice get 987
 
 clio-manage users list --name "Sarah"
-clio-manage users get 123
+clio-manage user get 123
 
 clio-manage practice-areas list --name "Family"
 clio-manage practice-areas list --matter-id 456
-clio-manage practice-areas get 45
+clio-manage practice-area get 45
 
 clio-manage billable-matters list --client-id 999
 clio-manage billable-clients list --start-date 2026-03-01
-clio-manage matters get 456 --redacted
+clio-manage matter get 456 --redacted
 ```
 
 ## Redacted mode
