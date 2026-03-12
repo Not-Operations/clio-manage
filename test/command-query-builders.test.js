@@ -7,6 +7,7 @@ const billableMatters = require("../src/commands-billable-matters");
 const contacts = require("../src/commands-contacts");
 const bills = require("../src/commands-bills");
 const matters = require("../src/commands-matters");
+const tasks = require("../src/commands-tasks");
 const users = require("../src/commands-users");
 const practiceAreas = require("../src/commands-practice-areas");
 
@@ -144,6 +145,46 @@ test("buildActivityQuery maps activity filters", () => {
     type: "TimeEntry",
     updated_since: "2026-03-09T12:00:00Z",
     user_id: "433452",
+  });
+});
+
+test("buildTaskQuery maps task filters", () => {
+  const query = tasks.__private.buildTaskQuery({
+    clientId: "12",
+    complete: false,
+    createdSince: "2026-03-01T00:00:00Z",
+    dueAtFrom: "2026-03-01",
+    dueAtTo: "2026-03-31",
+    limit: "25",
+    matterId: "15564573",
+    order: "due_at(asc)",
+    pageToken: "cursor-9",
+    priority: "high",
+    query: "Follow up",
+    responsibleAttorneyId: "433452",
+    status: "pending",
+    taskTypeId: "77",
+    updatedSince: "2026-03-09T12:00:00Z",
+  });
+
+  assert.deepStrictEqual(query, {
+    client_id: "12",
+    complete: false,
+    created_since: "2026-03-01T00:00:00Z",
+    due_at_from: "2026-03-01",
+    due_at_to: "2026-03-31",
+    fields:
+      "id,name,status,priority,due_at,complete,matter{id,display_number,number,description},contact{id,name,first_name,last_name},assignee{id,name,first_name,last_name},task_type{id,name}",
+    limit: 25,
+    matter_id: "15564573",
+    order: "due_at(asc)",
+    page_token: "cursor-9",
+    priority: "high",
+    query: "Follow up",
+    responsible_attorney_id: "433452",
+    status: "pending",
+    task_type_id: "77",
+    updated_since: "2026-03-09T12:00:00Z",
   });
 });
 
@@ -294,6 +335,7 @@ test("query builders fail fast on invalid limits", () => {
   assert.throws(() => contacts.__private.buildContactQuery({ limit: "0" }), /--limit/);
   assert.throws(() => activities.__private.buildActivityQuery({ limit: "500" }), /--limit/);
   assert.throws(() => bills.__private.buildBillQuery({ limit: "500" }), /--limit/);
+  assert.throws(() => tasks.__private.buildTaskQuery({ limit: "500" }), /--limit/);
   assert.throws(() => users.__private.buildUserQuery({ limit: "2001" }), /--limit/);
   assert.throws(() => billableClients.__private.buildBillableClientQuery({ limit: "26" }), /--limit/);
 });
@@ -339,6 +381,25 @@ test("row formatters normalize common Clio response shapes", () => {
       billed: "no",
       matter: "MAT-55",
       note: "Research",
+    }
+  );
+
+  assert.deepStrictEqual(
+    tasks.__private.formatTaskRow({
+      id: 10,
+      status: "pending",
+      due_at: "2026-03-22",
+      priority: "high",
+      matter: { display_number: "MAT-10" },
+      name: "Serve complaint",
+    }),
+    {
+      id: "10",
+      status: "pending",
+      dueAt: "2026-03-22",
+      priority: "high",
+      matter: "MAT-10",
+      task: "Serve complaint",
     }
   );
 

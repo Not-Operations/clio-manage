@@ -60,3 +60,28 @@ test("PromptOutput still forwards muted newlines", async () => {
 
   assert.deepStrictEqual(writes, [{ chunk: "\n", encoding: "buffer" }]);
 });
+
+test("PromptOutput does not forward the literal buffer encoding to the target", async () => {
+  const target = {
+    write(chunk, encoding) {
+      if (encoding === "buffer") {
+        throw new TypeError("Unknown encoding: buffer");
+      }
+      assert.equal(chunk.toString(), "\n");
+    },
+  };
+
+  const output = new PromptOutput(target);
+  output.muted = true;
+
+  await new Promise((resolve, reject) => {
+    output._write(Buffer.from("\n"), "buffer", (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+});

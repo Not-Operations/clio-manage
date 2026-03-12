@@ -1,6 +1,7 @@
 const {
   fetchActivitiesPage,
   fetchActivity,
+  fetchMattersPage,
   getValidAccessToken,
 } = require("./clio-api");
 const { getConfig, getTokenSet } = require("./store");
@@ -107,6 +108,10 @@ function printActivityList(rows, options) {
   if (!options.all && options.nextPageUrl) {
     console.log("");
     console.log("More results are available.");
+    if (options.pageTokenSupported === false) {
+      console.log("Run again with `--all` to fetch every matching activity.");
+      return;
+    }
     console.log("Run again with `--all` or pass `--page-token` from `--json` output.");
   }
 }
@@ -144,9 +149,139 @@ async function getAuthContext() {
   return { config, accessToken };
 }
 
+async function fetchMatterIdsForClient(config, accessToken, clientId) {
+  const matterQuery = {
+    client_id: clientId,
+    fields: "id",
+    limit: 200,
+  };
+  const result = await fetchPages(
+    (pageQuery, nextPageUrl) => fetchMattersPage(config, accessToken, pageQuery, nextPageUrl),
+    matterQuery,
+    true
+  );
+
+  const matterIds = result.data
+    .map((matter) => matter?.id)
+    .filter((id) => id !== undefined && id !== null && id !== "");
+
+  return {
+    matterIds,
+    pagesFetched: result.pagesFetched,
+  };
+}
+
+async function fetchActivitiesForClient(config, accessToken, query, options) {
+  if (query.page_token) {
+    throw new Error(
+      "`--page-token` is not supported with `activities list --client-id`. Use `--all` or filter by `--matter-id`."
+    );
+  }
+
+  const { matterIds, pagesFetched: matterPagesFetched } = await fetchMatterIdsForClient(
+    config,
+    accessToken,
+    options.clientId
+  );
+
+  if (matterIds.length === 0) {
+    return {
+      activityPagesFetched: 0,
+      data: [],
+      matterCount: 0,
+      matterLookupPagesFetched: matterPagesFetched,
+      moreResultsAvailable: false,
+    };
+  }
+
+  const aggregateLimit = query.limit || 200;
+  let remaining = options.all ? Number.POSITIVE_INFINITY : aggregateLimit;
+  let activityPagesFetched = 0;
+  const data = [];
+  let moreResultsAvailable = false;
+
+  for (let index = 0; index < matterIds.length; index += 1) {
+    const matterId = matterIds[index];
+
+    if (!options.all && remaining <= 0) {
+      moreResultsAvailable = true;
+      break;
+    }
+
+    const matterQuery = compactQuery({
+      ...query,
+      limit: options.all ? query.limit : Math.min(remaining, 200),
+      matter_id: matterId,
+      page_token: undefined,
+    });
+    const result = await fetchPages(
+      (pageQuery, nextPageUrl) => fetchActivitiesPage(config, accessToken, pageQuery, nextPageUrl),
+      matterQuery,
+      Boolean(options.all)
+    );
+
+    data.push(...result.data);
+    activityPagesFetched += result.pagesFetched;
+
+    if (!options.all) {
+      remaining -= result.data.length;
+      if (result.nextPageUrl || (remaining <= 0 && index < matterIds.length - 1)) {
+        moreResultsAvailable = true;
+      }
+    }
+  }
+
+  return {
+    activityPagesFetched,
+    data,
+    matterCount: matterIds.length,
+    matterLookupPagesFetched: matterPagesFetched,
+    moreResultsAvailable,
+  };
+}
+
 async function activitiesList(options = {}) {
   const query = buildActivityQuery(options);
   const { config, accessToken } = await getAuthContext();
+
+  if (options.clientId && !options.matterId) {
+    const clientResult = await fetchActivitiesForClient(config, accessToken, query, options);
+    const data = maybeRedactData(clientResult.data, options, "activity");
+
+    if (options.json) {
+      console.log(
+        JSON.stringify(
+          {
+            data,
+            meta: {
+              client_id: options.clientId,
+              activity_pages_fetched: clientResult.activityPagesFetched,
+              matter_count: clientResult.matterCount,
+              matter_pages_fetched: clientResult.matterLookupPagesFetched,
+              more_results_available: clientResult.moreResultsAvailable,
+              returned_count: data.length,
+            },
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+
+    const rows = data.map(formatActivityRow);
+    printActivityList(rows, {
+      all: Boolean(options.all),
+      nextPageUrl: clientResult.moreResultsAvailable ? "client-derived" : null,
+      pageTokenSupported: false,
+    });
+    console.log("");
+    console.log(
+      `Returned ${rows.length} activit${rows.length === 1 ? "y" : "ies"} across ${clientResult.activityPagesFetched} activity page${clientResult.activityPagesFetched === 1 ? "" : "s"} for ${clientResult.matterCount} matter${clientResult.matterCount === 1 ? "" : "s"}.`
+    );
+    return;
+  }
+
   const result = await fetchPages(
     (pageQuery, nextPageUrl) => fetchActivitiesPage(config, accessToken, pageQuery, nextPageUrl),
     query,
@@ -178,7 +313,11 @@ async function activitiesList(options = {}) {
   }
 
   const rows = maybeRedactData(result.data, options, "activity").map(formatActivityRow);
-  printActivityList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
+  printActivityList(rows, {
+    all: Boolean(options.all),
+    nextPageUrl: result.nextPageUrl,
+    pageTokenSupported: true,
+  });
   console.log("");
   console.log(
     `Returned ${rows.length} activit${rows.length === 1 ? "y" : "ies"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`

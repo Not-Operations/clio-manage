@@ -88,6 +88,8 @@ clio-manage auth login
 clio-manage auth status
 clio-manage activities list
 clio-manage activities get 123
+clio-manage tasks list
+clio-manage tasks get 789
 clio-manage contacts list
 clio-manage contacts get 12345
 clio-manage time-entries list
@@ -112,8 +114,14 @@ clio-manage auth revoke
 
 ```bash
 clio-manage activities list --status unbilled --matter-id 456
+clio-manage activities list --client-id 999 --all
 clio-manage activities get 123
 clio-manage time-entries list --user-id 88 --start-date 2026-03-01
+
+clio-manage tasks list
+clio-manage tasks list --matter-id 456
+clio-manage tasks list --client-id 999 --complete false
+clio-manage tasks get 789
 
 clio-manage contacts list --query "acme" --client-only
 clio-manage contacts get 12345
@@ -122,8 +130,10 @@ clio-manage matters list --status open --client-id 999
 clio-manage matters get 456
 
 clio-manage bills list --overdue-only --client-id 999
+clio-manage bills list --matter-id 456
 clio-manage bills get 987
 clio-manage invoices list --state awaiting_payment
+clio-manage invoices list --matter-id 456
 
 clio-manage users list --name "Sarah"
 clio-manage users get 123

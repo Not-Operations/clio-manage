@@ -11,14 +11,14 @@ class PromptOutput extends Writable {
 
   _write(chunk, encoding, callback) {
     if (!this.muted) {
-      this.target.write(chunk, encoding);
+      writePromptChunk(this.target, chunk, encoding);
       callback();
       return;
     }
 
     const text = decodePromptChunk(chunk, encoding);
     if (text === "\n" || text === "\r\n") {
-      this.target.write(chunk, encoding);
+      writePromptChunk(this.target, chunk, encoding);
     }
 
     callback();
@@ -39,6 +39,15 @@ function decodePromptChunk(chunk, encoding) {
   }
 
   return chunk.toString();
+}
+
+function writePromptChunk(target, chunk, encoding) {
+  if (encoding && encoding !== "buffer") {
+    target.write(chunk, encoding);
+    return;
+  }
+
+  target.write(chunk);
 }
 
 async function withPrompt(callback) {

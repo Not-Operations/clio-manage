@@ -335,6 +335,14 @@ async function createActivity(config, accessToken, data, query = {}) {
   return createResource(config, accessToken, "activities", data, query);
 }
 
+async function fetchTasksPage(config, accessToken, query = {}, nextPageUrl = null) {
+  return fetchResourcePage(config, accessToken, "tasks", query, nextPageUrl);
+}
+
+async function fetchTask(config, accessToken, id, query = {}) {
+  return fetchResourceById(config, accessToken, "tasks", id, query);
+}
+
 async function fetchBillableMattersPage(
   config,
   accessToken,
@@ -360,6 +368,8 @@ module.exports = {
   exchangeAuthorizationCode,
   fetchActivitiesPage,
   fetchActivity,
+  fetchTask,
+  fetchTasksPage,
   fetchBill,
   fetchBillableClientsPage,
   fetchBillableMattersPage,

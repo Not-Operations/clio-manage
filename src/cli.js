@@ -12,6 +12,7 @@ const {
   activitiesGet,
   activitiesList,
 } = require("./commands-activities");
+const { tasksGet, tasksList } = require("./commands-tasks");
 const {
   billableClientsList,
 } = require("./commands-billable-clients");
@@ -79,6 +80,8 @@ function printHelp() {
   console.log("  auth revoke        Revoke token and clear local token storage");
   console.log("  activities list    List activities with filters and pagination");
   console.log("  activities get     Fetch a single activity by id");
+  console.log("  tasks list         List tasks with filters and pagination");
+  console.log("  tasks get          Fetch a single task by id");
   console.log("  contacts list      List contacts with filters and pagination");
   console.log("  contacts get       Fetch a single contact by id");
   console.log("  time-entries list  Alias for activities list filtered to TimeEntry");
@@ -170,6 +173,7 @@ async function run(args) {
       activityDescriptionId:
         optionValues["activity-description-id"] || optionValues.activity_description_id,
       all: Boolean(optionValues.all),
+      clientId: optionValues["client-id"] || optionValues.client_id,
       createdSince: optionValues["created-since"] || optionValues.created_since,
       endDate: optionValues["end-date"] || optionValues.end_date,
       fields: optionValues.fields,
@@ -202,6 +206,45 @@ async function run(args) {
 
   if ((command === "activities" || command === "time-entries") && sub === "get") {
     await activitiesGet({
+      fields: optionValues.fields,
+      id: positional[0],
+      json,
+      redacted: Boolean(optionValues.redacted),
+    });
+    return;
+  }
+
+  if (command === "tasks" && sub === "list") {
+    await tasksList({
+      all: Boolean(optionValues.all),
+      clientId: optionValues["client-id"] || optionValues.client_id,
+      complete:
+        optionValues.complete === undefined
+          ? undefined
+          : optionValues.complete !== "false",
+      createdSince: optionValues["created-since"] || optionValues.created_since,
+      dueAtFrom: optionValues["due-at-from"] || optionValues.due_at_from,
+      dueAtTo: optionValues["due-at-to"] || optionValues.due_at_to,
+      fields: optionValues.fields,
+      json,
+      limit: optionValues.limit,
+      matterId: optionValues["matter-id"] || optionValues.matter_id,
+      order: optionValues.order,
+      pageToken: optionValues["page-token"] || optionValues.page_token,
+      priority: optionValues.priority,
+      query: optionValues.query,
+      redacted: Boolean(optionValues.redacted),
+      responsibleAttorneyId:
+        optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
+      status: optionValues.status,
+      taskTypeId: optionValues["task-type-id"] || optionValues.task_type_id,
+      updatedSince: optionValues["updated-since"] || optionValues.updated_since,
+    });
+    return;
+  }
+
+  if (command === "tasks" && sub === "get") {
+    await tasksGet({
       fields: optionValues.fields,
       id: positional[0],
       json,

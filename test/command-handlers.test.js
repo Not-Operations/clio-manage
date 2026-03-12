@@ -110,6 +110,42 @@ const specs = [
     ],
   },
   {
+    name: "tasks",
+    moduleFile: "src/commands-tasks.js",
+    listExport: "tasksList",
+    getExport: "tasksGet",
+    fetchPageExport: "fetchTasksPage",
+    fetchItemExport: "fetchTask",
+    emptyMessage: "No tasks found for the selected filters.",
+    usageMessage: "Usage: clio-manage tasks get <id> [--fields ...] [--json]",
+    listOptions: { matterId: "303", limit: "5" },
+    getId: "606",
+    sample: {
+      id: 606,
+      name: "Serve complaint",
+      description: "Prepare service packet",
+      status: "pending",
+      priority: "high",
+      due_at: "2026-03-20",
+      complete: false,
+      created_at: "2026-03-10",
+      updated_at: "2026-03-12",
+      matter: { display_number: "MAT-606" },
+      contact: { name: "Acme LLC" },
+      assignee: { first_name: "Dana", last_name: "Doyle" },
+      assigner: { name: "Riley Staff" },
+      responsible_attorney: { name: "Morgan Origin" },
+      task_type: { name: "Follow-up" },
+    },
+    listFragments: ["pending", "2026-03-20", "MAT-606", "Serve complaint"],
+    detailFragments: [
+      "Name                 : Serve complaint",
+      "Matter               : MAT-606",
+      "Assignee             : Dana Doyle",
+      "Task Type            : Follow-up",
+    ],
+  },
+  {
     name: "bills",
     moduleFile: "src/commands-bills.js",
     listExport: "billsList",
@@ -456,6 +492,93 @@ test("bills list normalizes unpaid status to awaiting_payment state", async () =
         state: "awaiting_payment",
       },
     ]);
+  } finally {
+    restore();
+  }
+});
+
+test("activities list resolves client ids through the matter collection", async () => {
+  const activitySpec = specs.find((spec) => spec.name === "activities");
+  const matterCalls = [];
+  const activityCalls = [];
+  const { module, restore } = loadCommandModule(activitySpec, {
+    fetchActivitiesPage: async (_config, _accessToken, query) => {
+      activityCalls.push(query);
+      if (query.matter_id === 303) {
+        return buildPage([
+          {
+            ...activitySpec.sample,
+            id: 31,
+            matter: { display_number: "MAT-303" },
+            note: "Research issue",
+          },
+        ]);
+      }
+
+      return buildPage([
+        {
+          ...activitySpec.sample,
+          id: 32,
+          matter: { display_number: "MAT-304" },
+          note: "Draft memo",
+        },
+      ]);
+    },
+    fetchMattersPage: async (_config, _accessToken, query, nextPageUrl) => {
+      matterCalls.push({ nextPageUrl, query });
+      return buildPage(nextPageUrl ? [] : [{ id: 303 }, { id: 304 }]);
+    },
+  });
+
+  try {
+    const { logs } = await captureConsole(() =>
+      module.activitiesList({ clientId: "999", limit: "5" })
+    );
+    const output = logs.join("\n");
+
+    assert.match(output, /Research issue/);
+    assert.match(output, /Draft memo/);
+    assert.match(output, /Returned 2 activities across 2 activity pages for 2 matters\./);
+    assert.deepStrictEqual(matterCalls, [
+      {
+        nextPageUrl: undefined,
+        query: {
+          client_id: "999",
+          fields: "id",
+          limit: 200,
+        },
+      },
+    ]);
+    assert.deepStrictEqual(activityCalls, [
+      {
+        fields:
+          "id,type,date,quantity,quantity_in_hours,price,total,billed,on_bill,non_billable,note,matter{id,display_number,number,description},user{id,name,first_name,last_name}",
+        limit: 5,
+        matter_id: 303,
+      },
+      {
+        fields:
+          "id,type,date,quantity,quantity_in_hours,price,total,billed,on_bill,non_billable,note,matter{id,display_number,number,description},user{id,name,first_name,last_name}",
+        limit: 4,
+        matter_id: 304,
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("activities list rejects page tokens for client-derived filtering", async () => {
+  const activitySpec = specs.find((spec) => spec.name === "activities");
+  const { module, restore } = loadCommandModule(activitySpec, {
+    fetchMattersPage: async () => buildPage([{ id: 303 }]),
+  });
+
+  try {
+    await assert.rejects(
+      () => module.activitiesList({ clientId: "999", pageToken: "cursor-1" }),
+      /--page-token/
+    );
   } finally {
     restore();
   }
