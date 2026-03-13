@@ -739,10 +739,11 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     assert.match(output, /Setup flow:/);
     assert.match(output, /Open your Clio developer app, or create one if you do not have one yet/);
     assert.match(output, /Clio app form guide:/);
-    assert.match(output, /Website URL \(required\): use your firm website, company site, or GitHub repo/);
+    assert.match(output, /Required:/);
+    assert.match(output, /Website URL: use your firm website, company site, or GitHub repo/);
     assert.match(output, /Do not put the local callback URL in Website URL/);
-    assert.match(output, /Clio Manage permissions \/ scopes: choose the access this CLI should have/);
-    assert.match(output, /Redirect URIs \(required\): copy this exact URL on its own line/);
+    assert.match(output, /select only the permissions this CLI will actually use/i);
+    assert.match(output, /Redirect URIs: copy this exact URL on its own line/);
     assert.match(output, /You do not need to paste the redirect URI back into this CLI unless you want to override it/);
     assert.match(
       output,
@@ -751,11 +752,14 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     assert.match(output, /If you already have a Clio developer app in this region, you can use it/);
     assert.match(output, /Opened the Canada Clio developer portal in your browser/);
     assert.match(output, /In the developer portal:/);
-    assert.match(output, /Sign in first, then open the Clio developer app you want this CLI to use/);
-    assert.match(output, /Use an existing Clio developer app in this region, or create a new one/);
-    assert.match(output, /Select the Clio Manage permissions \(OAuth scopes\) this CLI should access/);
+    assert.match(output, /First:/);
+    assert.match(output, /Sign in, then open the Clio developer app you want this CLI to use/);
+    assert.match(output, /Use an existing app in this region, or create a new one/);
+    assert.match(output, /Permissions:/);
+    assert.match(output, /Select only the Clio Manage permissions \(OAuth scopes\) this CLI should access/);
     assert.match(output, /Register this exact URL in your Clio developer app/);
-    assert.match(output, /Then copy the App Key and App Secret from that same app back here/);
+    assert.match(output, /Then:/);
+    assert.match(output, /Copy the App Key and App Secret from that same app back here/);
     assert.match(
       output,
       new RegExp(DEFAULT_REDIRECT_URI.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))

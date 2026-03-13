@@ -20,6 +20,13 @@ Include:
 - Never include real client records, billing data, matter data, access tokens, refresh tokens, or client secrets in issues or pull requests.
 - Redact screenshots and command output before sharing them.
 
+## Local-only security model
+
+- The CLI is designed to run locally on the user's device.
+- Clio data is fetched directly from Clio to the local machine.
+- OAuth credentials and tokens are stored in the OS keychain.
+- Redaction reduces risk but is best-effort only and must not be treated as a guarantee.
+
 ## Scope
 
 Security issues include, for example:

@@ -164,23 +164,34 @@ function printSetupLinks(region, redirectUri) {
 
 function printClioAppFieldGuide(redirectUri) {
   console.log("Clio app form guide:");
-  console.log("  Website URL (required): use your firm website, company site, or GitHub repo.");
-  console.log("  Do not put the local callback URL in Website URL.");
-  console.log("  Clio Manage permissions / scopes: choose the access this CLI should have.");
-  console.log("  Redirect URIs (required): copy this exact URL on its own line:");
-  console.log(`  - ${redirectUri}`);
-  console.log("  Support URL and Deauthorization callback URL can be left blank unless you already use them.");
+  console.log("");
+  console.log("  Required:");
+  console.log("  - Website URL: use your firm website, company site, or GitHub repo.");
+  console.log("  - Do not put the local callback URL in Website URL.");
+  console.log("  - Clio Manage permissions / scopes: select only the permissions this CLI will actually use.");
+  console.log("  - Redirect URIs: copy this exact URL on its own line:");
+  console.log(`    ${redirectUri}`);
+  console.log("");
+  console.log("  Optional:");
+  console.log("  - Support URL and Deauthorization callback URL can stay blank unless you already use them.");
 }
 
 function printDeveloperPortalReminder(redirectUri) {
   console.log("In the developer portal:");
-  console.log("  Sign in first, then open the Clio developer app you want this CLI to use.");
-  console.log("  Use an existing Clio developer app in this region, or create a new one.");
-  console.log("  Select the Clio Manage permissions (OAuth scopes) this CLI should access.");
-  console.log("Redirect URI:");
-  console.log("  Register this exact URL in your Clio developer app.");
-  console.log(`- ${redirectUri}`);
-  console.log("Then copy the App Key and App Secret from that same app back here.");
+  console.log("");
+  console.log("  First:");
+  console.log("  - Sign in, then open the Clio developer app you want this CLI to use.");
+  console.log("  - Use an existing app in this region, or create a new one.");
+  console.log("");
+  console.log("  Permissions:");
+  console.log("  - Select only the Clio Manage permissions (OAuth scopes) this CLI should access.");
+  console.log("");
+  console.log("  Redirect URI:");
+  console.log("  - Register this exact URL in your Clio developer app:");
+  console.log(`    ${redirectUri}`);
+  console.log("");
+  console.log("  Then:");
+  console.log("  - Copy the App Key and App Secret from that same app back here.");
 }
 
 function printConfidentialityNotice() {
@@ -207,7 +218,8 @@ function printSetupIntro(redirectUri) {
   console.log(`- OAuth guide: ${CLIO_AUTHORIZATION_GUIDE_URL}`);
   console.log("");
   printClioAppFieldGuide(redirectUri);
-  console.log("  You do not need to paste the redirect URI back into this CLI unless you want to override it.");
+  console.log("");
+  console.log("You do not need to paste the redirect URI back into this CLI unless you want to override it.");
   console.log("");
   console.log("Region options:");
   Object.values(REGIONS).forEach((region) => {

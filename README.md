@@ -65,6 +65,7 @@ clio-manage auth setup
 5. Fill out the Clio app form:
    - `Website URL`: use your firm site, company site, or GitHub repo
    - do not put the loopback callback URL in `Website URL`
+   - select only the Clio permissions your workflow will actually use through this tool
    - `Redirect URIs`: copy `http://127.0.0.1:53123/callback`
 6. Copy the App Key and App Secret from that same Clio app back into the CLI.
 7. Finish login:
@@ -85,6 +86,13 @@ During setup, the CLI asks you to acknowledge that:
 - command output can contain confidential or privileged client information
 - `--redacted` is best-effort only and may miss identifiers in labels, custom fields, or free text
 - you must review output before sharing it with AI tools or other third parties
+
+## Local-only docs
+
+- [PRIVACY.md](PRIVACY.md)
+- [DATA-HANDLING.md](DATA-HANDLING.md)
+- [DISCLAIMER.md](DISCLAIMER.md)
+- [SECURITY.md](SECURITY.md)
 
 ## Core commands
 
