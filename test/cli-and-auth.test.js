@@ -1068,7 +1068,7 @@ test("getValidAccessToken refreshes keychain tokens that are near expiry", async
   }
 });
 
-test("getValidAccessToken rejects expired environment tokens", async () => {
+test("getValidAccessToken rejects expiring tokens when no refresh token is present", async () => {
   const { module, restore } = loadClioApi();
 
   try {
@@ -1077,12 +1077,12 @@ test("getValidAccessToken rejects expired environment tokens", async () => {
         module.getValidAccessToken(
           { clientId: "client-id", clientSecret: "client-secret", host: "app.clio.com" },
           {
-            accessToken: "expired-env-token",
+            accessToken: "old-token",
             expiresAt: Math.floor(Date.now() / 1000) + 30,
-            source: "env",
+            source: "keychain",
           }
         ),
-      /expired or near expiry/
+      /Missing refresh token/
     );
   } finally {
     restore();

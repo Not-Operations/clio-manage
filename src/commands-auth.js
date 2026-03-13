@@ -113,21 +113,7 @@ function rewriteOAuthError(error, config) {
 }
 
 function collectSecurityWarnings(config, tokenSet) {
-  const warnings = [];
-
-  if (config?.source === "env") {
-    warnings.push(
-      "App credentials are loaded from environment variables. Prefer the OS keychain on shared or monitored machines."
-    );
-  }
-
-  if (tokenSet?.source === "env") {
-    warnings.push(
-      "OAuth tokens are loaded from environment variables. Prefer keychain-backed login so tokens can be rotated and cleared locally."
-    );
-  }
-
-  return warnings;
+  return [];
 }
 
 function printSetupBanner() {
@@ -404,11 +390,6 @@ async function authRevoke() {
   } catch (error) {
     console.log(`Clio deauthorize call failed: ${error.message}`);
     console.log("Clearing local token anyway.");
-  }
-
-  if (tokenSet.source === "env") {
-    console.log("Token came from environment variables; nothing removed from keychain.");
-    return;
   }
 
   await clearTokenSet();

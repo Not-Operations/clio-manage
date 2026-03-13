@@ -283,10 +283,6 @@ function printHelp() {
   console.log("  --unredacted       Show raw output without default redaction");
   console.log("  -h, --help         Show help");
   console.log("  -v, --version      Show version");
-  console.log("");
-  console.log("Power-user env vars:");
-  console.log("  CLIO_REGION, CLIO_CLIENT_ID, CLIO_CLIENT_SECRET, CLIO_REDIRECT_URI");
-  console.log("  CLIO_ACCESS_TOKEN, CLIO_REFRESH_TOKEN, CLIO_EXPIRES_AT");
 }
 
 async function run(args) {

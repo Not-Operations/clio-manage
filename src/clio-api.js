@@ -207,12 +207,6 @@ async function getValidAccessToken(config, tokenSet) {
     return tokenSet.accessToken;
   }
 
-  if (tokenSet.source === "env") {
-    throw new Error(
-      "CLIO_ACCESS_TOKEN is expired or near expiry. Update your env vars or use keychain-backed login."
-    );
-  }
-
   const refreshed = await refreshAccessToken(config, tokenSet);
   return refreshed.accessToken;
 }

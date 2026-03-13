@@ -52,44 +52,6 @@ function buildConfig(region, clientId, clientSecret, redirectUri, source) {
   };
 }
 
-function readEnvConfig() {
-  const region = process.env.CLIO_REGION;
-  const clientId = process.env.CLIO_CLIENT_ID;
-  const clientSecret = process.env.CLIO_CLIENT_SECRET;
-  const redirectUri = process.env.CLIO_REDIRECT_URI;
-  const hasAny = Boolean(region || clientId || clientSecret || redirectUri);
-
-  if (!hasAny) {
-    return null;
-  }
-
-  if (!region || !clientId || !clientSecret) {
-    throw new Error(
-      "Partial env config detected. Set CLIO_REGION, CLIO_CLIENT_ID, and CLIO_CLIENT_SECRET together."
-    );
-  }
-
-  return buildConfig(region, clientId, clientSecret, redirectUri, "env");
-}
-
-function readEnvTokens() {
-  const accessToken = process.env.CLIO_ACCESS_TOKEN;
-  const refreshToken = process.env.CLIO_REFRESH_TOKEN;
-  const expiresAtRaw = process.env.CLIO_EXPIRES_AT;
-
-  if (!accessToken) {
-    return null;
-  }
-
-  return {
-    source: "env",
-    accessToken,
-    refreshToken: refreshToken || null,
-    expiresAt: expiresAtRaw ? Number(expiresAtRaw) : null,
-    tokenType: "Bearer",
-  };
-}
-
 async function getStoredConfig() {
   const [region, clientId, clientSecret, redirectUri] = await Promise.all([
     getSecret(ACCOUNTS.region),
@@ -142,11 +104,6 @@ async function getConfig() {
 }
 
 async function findConfig() {
-  const envConfig = readEnvConfig();
-  if (envConfig) {
-    return envConfig;
-  }
-
   const storedConfig = await getStoredConfig();
   if (storedConfig) {
     return storedConfig;
@@ -202,11 +159,6 @@ async function getStoredTokenSet() {
 }
 
 async function getTokenSet() {
-  const envTokens = readEnvTokens();
-  if (envTokens) {
-    return envTokens;
-  }
-
   return getStoredTokenSet();
 }
 

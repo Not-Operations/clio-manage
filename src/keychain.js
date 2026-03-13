@@ -14,7 +14,7 @@ function normalizeKeychainError(action, error) {
   const rawMessage = error && error.message ? error.message : String(error || "");
   const message = rawMessage && rawMessage !== "[object Object]" ? rawMessage : "unknown error";
   return new Error(
-    `OS keychain ${action} failed (${message}). You can use CLIO_* env vars as a fallback.`
+    `OS keychain ${action} failed (${message}). This CLI requires a working OS keychain.`
   );
 }
 

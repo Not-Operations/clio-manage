@@ -177,7 +177,7 @@ clio-manage matter get 456 --redacted
 - Setup masks the App Secret when you type it in the terminal.
 - Local OAuth redirects are restricted to loopback HTTP callbacks such as `http://127.0.0.1:53123/callback`.
 - API pagination links are validated before the CLI sends a bearer token to them.
-- `CLIO_*` env vars are supported for power users and automation, but are less safe than the OS keychain on shared or monitored machines.
+- This CLI requires a working OS keychain for Clio app credentials and OAuth tokens.
 - Tokens are never written to plaintext files by default.
 - Command output can contain sensitive client and matter data, so avoid shell logging, screen sharing, or pasting raw output into tickets and chats.
 - This CLI does not guarantee privilege-safe or de-identified output. Your firm still needs its own review process, approved vendors, and legal/privacy sign-off where required.
@@ -190,19 +190,9 @@ clio-manage matter get 456 --redacted
 - Dependabot is configured for both npm dependencies and GitHub Actions.
 - npm release publishing is set up for provenance-backed trusted publishing from GitHub Actions using the `npm` environment.
 
-## Env vars (optional)
-
-- `CLIO_REGION`
-- `CLIO_CLIENT_ID`
-- `CLIO_CLIENT_SECRET`
-- `CLIO_REDIRECT_URI`
-- `CLIO_ACCESS_TOKEN`
-- `CLIO_REFRESH_TOKEN`
-- `CLIO_EXPIRES_AT` (unix seconds)
-
 ## Troubleshooting
 
-- `OS keychain ... failed`: run with `CLIO_*` env vars as fallback, or re-enable your OS keychain service.
+- `OS keychain ... failed`: re-enable your OS keychain service or run the CLI in a supported desktop session with keychain access.
 - `Redirect URI must use ... loopback ...`: this CLI only supports local loopback OAuth callbacks. Use `http://127.0.0.1:<port>/callback` or `http://localhost:<port>/callback`.
 - `403 Forbidden`: confirm your Clio app has the relevant Clio permissions for Contacts, Matters, Bills, Users, or Practice Areas, then re-authorize.
 - `401 Unauthorized`: run `clio-manage auth login` again.
