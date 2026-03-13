@@ -102,6 +102,32 @@ const DEFAULT_FIELDS_BY_COMMAND = {
       "id,name,first_name,last_name,email,enabled,roles,subscription_type,phone_number,time_zone,rate,account_owner,clio_connect,court_rules_default_attendee,created_at,updated_at",
   },
 };
+const DATA_COMMANDS = new Set([
+  "activities",
+  "time-entries",
+  "tasks",
+  "contacts",
+  "matters",
+  "bills",
+  "invoices",
+  "users",
+  "practice-areas",
+  "billable-matters",
+  "billable-clients",
+]);
+const LIMITED_REDACTION_COMMANDS = new Set([
+  "activities",
+  "time-entries",
+  "tasks",
+  "matters",
+  "bills",
+  "invoices",
+  "billable-matters",
+]);
+const LOW_EFFECT_REDACTION_COMMANDS = new Set([
+  "users",
+  "practice-areas",
+]);
 
 function hasFlag(args, ...flags) {
   return flags.some((flag) => args.includes(flag));
@@ -161,6 +187,40 @@ function maybePrintDefaultFields(command, sub, optionValues) {
   return true;
 }
 
+function resolveRedactionPreference(optionValues) {
+  if (optionValues.unredacted !== undefined) {
+    return false;
+  }
+
+  return true;
+}
+
+function warnAboutRedaction(command, sub, redacted) {
+  if (!redacted || sub !== "list" && sub !== "get" || !DATA_COMMANDS.has(command)) {
+    return;
+  }
+
+  console.error(
+    "Warning: output is redacted by default. Redaction is best-effort and may miss client or matter identifiers."
+  );
+  console.error(
+    "Review output before sharing it outside your firm. Re-run with `--unredacted` to show raw output."
+  );
+
+  if (LIMITED_REDACTION_COMMANDS.has(command)) {
+    console.error(
+      "Warning: related matter labels, captions, and other non-client fields may still identify a matter."
+    );
+    return;
+  }
+
+  if (LOW_EFFECT_REDACTION_COMMANDS.has(command)) {
+    console.error(
+      "Warning: this endpoint may look unchanged because it does not usually contain client/contact identity fields."
+    );
+  }
+}
+
 function printHelp() {
   console.log("clio-manage");
   console.log("");
@@ -202,7 +262,8 @@ function printHelp() {
   console.log("Options:");
   console.log("  --fields <list>    Override returned fields; pass `--fields` alone to print defaults");
   console.log("  --json             Print machine-readable JSON for supported commands");
-  console.log("  --redacted         Redact client/contact PII from output for safe sharing");
+  console.log("  --redacted         Kept for compatibility; data commands are redacted by default");
+  console.log("  --unredacted       Show raw output without default redaction");
   console.log("  -h, --help         Show help");
   console.log("  -v, --version      Show version");
   console.log("");
@@ -237,6 +298,7 @@ async function run(args) {
   const parsedOptions = parseOptions(optionTokens);
   const optionValues = parsedOptions.parsed;
   const positional = parsedOptions.positional;
+  const redacted = resolveRedactionPreference(optionValues);
 
   if (maybePrintDefaultFields(command, sub, optionValues)) {
     return;
@@ -273,6 +335,7 @@ async function run(args) {
   }
 
   if ((command === "activities" || command === "time-entries") && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await activitiesList({
       activityDescriptionId:
         optionValues["activity-description-id"] || optionValues.activity_description_id,
@@ -294,7 +357,7 @@ async function run(args) {
       order: optionValues.order,
       pageToken: optionValues["page-token"] || optionValues.page_token,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       startDate: optionValues["start-date"] || optionValues.start_date,
       status: optionValues.status,
       taskId: optionValues["task-id"] || optionValues.task_id,
@@ -309,16 +372,18 @@ async function run(args) {
   }
 
   if ((command === "activities" || command === "time-entries") && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await activitiesGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if (command === "tasks" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await tasksList({
       all: Boolean(optionValues.all),
       clientId: optionValues["client-id"] || optionValues.client_id,
@@ -337,7 +402,7 @@ async function run(args) {
       pageToken: optionValues["page-token"] || optionValues.page_token,
       priority: optionValues.priority,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       responsibleAttorneyId:
         optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
       status: optionValues.status,
@@ -348,16 +413,18 @@ async function run(args) {
   }
 
   if (command === "tasks" && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await tasksGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if (command === "contacts" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await contactsList({
       all: Boolean(optionValues.all),
       clientOnly: Boolean(optionValues["client-only"] || optionValues.client_only),
@@ -373,7 +440,7 @@ async function run(args) {
       order: optionValues.order,
       pageToken: optionValues["page-token"] || optionValues.page_token,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       type: optionValues.type,
       updatedSince: optionValues["updated-since"] || optionValues.updated_since,
     });
@@ -381,16 +448,18 @@ async function run(args) {
   }
 
   if (command === "contacts" && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await contactsGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if (command === "matters" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await mattersList({
       all: Boolean(optionValues.all),
       clientId: optionValues["client-id"] || optionValues.client_id,
@@ -404,7 +473,7 @@ async function run(args) {
       pageToken: optionValues["page-token"] || optionValues.page_token,
       practiceAreaId: optionValues["practice-area-id"] || optionValues.practice_area_id,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       responsibleAttorneyId:
         optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
       responsibleStaffId:
@@ -416,16 +485,18 @@ async function run(args) {
   }
 
   if (command === "matters" && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await mattersGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if ((command === "bills" || command === "invoices") && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await billsList({
       all: Boolean(optionValues.all),
       clientId: optionValues["client-id"] || optionValues.client_id,
@@ -442,7 +513,7 @@ async function run(args) {
       overdueOnly: Boolean(optionValues["overdue-only"] || optionValues.overdue_only),
       pageToken: optionValues["page-token"] || optionValues.page_token,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       state: optionValues.state,
       status: optionValues.status,
       type: optionValues.type,
@@ -452,16 +523,18 @@ async function run(args) {
   }
 
   if ((command === "bills" || command === "invoices") && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await billsGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if (command === "users" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await usersList({
       all: Boolean(optionValues.all),
       createdSince: optionValues["created-since"] || optionValues.created_since,
@@ -480,7 +553,7 @@ async function run(args) {
         optionValues["pending-setup"] === undefined && optionValues.pending_setup === undefined
           ? undefined
           : (optionValues["pending-setup"] || optionValues.pending_setup) !== "false",
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       role: optionValues.role,
       subscriptionType:
         optionValues["subscription-type"] || optionValues.subscription_type,
@@ -490,16 +563,18 @@ async function run(args) {
   }
 
   if (command === "users" && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await usersGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if (command === "practice-areas" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await practiceAreasList({
       all: Boolean(optionValues.all),
       code: optionValues.code,
@@ -511,23 +586,25 @@ async function run(args) {
       name: optionValues.name,
       order: optionValues.order,
       pageToken: optionValues["page-token"] || optionValues.page_token,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       updatedSince: optionValues["updated-since"] || optionValues.updated_since,
     });
     return;
   }
 
   if (command === "practice-areas" && sub === "get") {
+    warnAboutRedaction(command, sub, redacted);
     await practiceAreasGet({
       fields: optionValues.fields,
       id: positional[0],
       json,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
     });
     return;
   }
 
   if (command === "billable-matters" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await billableMattersList({
       all: Boolean(optionValues.all),
       clientId: optionValues["client-id"] || optionValues.client_id,
@@ -540,7 +617,7 @@ async function run(args) {
         optionValues["originating-attorney-id"] || optionValues.originating_attorney_id,
       pageToken: optionValues["page-token"] || optionValues.page_token,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       responsibleAttorneyId:
         optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
       startDate: optionValues["start-date"] || optionValues.start_date,
@@ -549,6 +626,7 @@ async function run(args) {
   }
 
   if (command === "billable-clients" && sub === "list") {
+    warnAboutRedaction(command, sub, redacted);
     await billableClientsList({
       all: Boolean(optionValues.all),
       clientId: optionValues["client-id"] || optionValues.client_id,
@@ -561,7 +639,7 @@ async function run(args) {
         optionValues["originating-attorney-id"] || optionValues.originating_attorney_id,
       pageToken: optionValues["page-token"] || optionValues.page_token,
       query: optionValues.query,
-      redacted: Boolean(optionValues.redacted),
+      redacted,
       responsibleAttorneyId:
         optionValues["responsible-attorney-id"] || optionValues.responsible_attorney_id,
       startDate: optionValues["start-date"] || optionValues.start_date,

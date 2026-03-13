@@ -2,7 +2,7 @@ const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { loadWithMocks } = require("./helpers/module-test-utils");
+const { captureConsole, loadWithMocks } = require("./helpers/module-test-utils");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -107,7 +107,7 @@ test("cli routes activities list client filters", async () => {
         order: undefined,
         pageToken: undefined,
         query: undefined,
-        redacted: false,
+        redacted: true,
         startDate: undefined,
         status: "unbilled",
         taskId: undefined,
@@ -157,7 +157,7 @@ test("cli routes tasks list filters", async () => {
         pageToken: undefined,
         priority: undefined,
         query: undefined,
-        redacted: false,
+        redacted: true,
         responsibleAttorneyId: undefined,
         status: undefined,
         taskTypeId: "77",
@@ -199,7 +199,7 @@ test("cli accepts singular aliases for contact get", async () => {
         fields: undefined,
         id: "12345",
         json: true,
-        redacted: false,
+        redacted: true,
       },
     ]);
   } finally {
@@ -218,9 +218,58 @@ test("cli accepts singular aliases for bill get", async () => {
         fields: undefined,
         id: "987",
         json: false,
+        redacted: true,
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("cli warns when best-effort default redaction is applied", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    const { errors } = await captureConsole(() => run(["bill", "get", "987"]));
+
+    assert.deepStrictEqual(calls.billsGet, [
+      {
+        fields: undefined,
+        id: "987",
+        json: false,
+        redacted: true,
+      },
+    ]);
+    assert.match(
+      errors.join("\n"),
+      /Warning: output is redacted by default\. Redaction is best-effort/
+    );
+    assert.match(
+      errors.join("\n"),
+      /related matter labels, captions, and other non-client fields may still identify a matter/
+    );
+  } finally {
+    restore();
+  }
+});
+
+test("cli allows --unredacted to bypass the default redaction warning", async () => {
+  const { calls, restore, run } = loadCli();
+
+  try {
+    const { errors } = await captureConsole(() =>
+      run(["contact", "get", "12345", "--json", "--unredacted"])
+    );
+
+    assert.deepStrictEqual(calls.contactsGet, [
+      {
+        fields: undefined,
+        id: "12345",
+        json: true,
         redacted: false,
       },
     ]);
+    assert.deepStrictEqual(errors, []);
   } finally {
     restore();
   }
