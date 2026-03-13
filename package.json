@@ -7,7 +7,7 @@
   "type": "commonjs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Not-Operations/not-manage"
+    "url": "git+https://github.com/Not-Operations/not-manage.git"
   },
   "bin": {
     "not-manage": "bin/not-manage.js"
