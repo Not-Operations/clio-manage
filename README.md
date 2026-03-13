@@ -2,7 +2,7 @@
 
 `not-manage` is an unofficial command-line tool for Clio Manage integrations and AI workflows.
 
-This project is a terminal CLI from Not Operations. It is not a Clio product, and it is not affiliated with, endorsed by, or sponsored by Clio or Themis Solutions Inc.
+This project is a terminal CLI from [Not Operations](https://notoperations.com/legal). It is not a Clio product, and it is not affiliated with, endorsed by, or sponsored by Clio or Themis Solutions Inc.
 
 ## Package
 
