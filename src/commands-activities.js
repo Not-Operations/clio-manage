@@ -1,10 +1,4 @@
-const {
-  fetchActivitiesPage,
-  fetchActivity,
-  fetchMattersPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
+const { fetchResourceById, fetchResourcePage } = require("./clio-api");
 const {
   clip,
   compactQuery,
@@ -16,12 +10,16 @@ const {
   readMatterLabel,
   readUserName,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const {
+  buildSummaryMessage,
+  createGetCommand,
+  createListCommand,
+  fetchDefaultListResult,
+} = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,type,date,quantity,quantity_in_hours,rounded_quantity,rounded_quantity_in_hours,price,total,billed,on_bill,non_billable,no_charge,flat_rate,contingency_fee,note,reference,created_at,updated_at,activity_description{id,name},bill{id,number,state},matter{id,display_number,number,description},user{id,name,first_name,last_name,email}";
-const DEFAULT_GET_FIELDS =
-  "id,type,date,quantity,quantity_in_hours,rounded_quantity,rounded_quantity_in_hours,price,total,billed,on_bill,non_billable,no_charge,flat_rate,contingency_fee,note,reference,created_at,updated_at,activity_description{id,name},bill{id,number,state},matter{id,display_number,number,description},user{id,name,first_name,last_name,email}";
+const ACTIVITY_RESOURCE = getResourceMetadata("activities");
+const MATTER_RESOURCE = getResourceMetadata("matters");
 
 function readHours(activity) {
   const quantityInHours = Number(activity?.quantity_in_hours);
@@ -39,11 +37,10 @@ function readHours(activity) {
 
 function buildActivityQuery(options) {
   return compactQuery({
-    activity_description_id:
-      options.activityDescriptionId || undefined,
+    activity_description_id: options.activityDescriptionId || undefined,
     created_since: options.createdSince || undefined,
     end_date: options.endDate || undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || ACTIVITY_RESOURCE.defaultFields.list,
     flat_rate:
       options.flatRate === undefined || options.flatRate === null
         ? undefined
@@ -65,14 +62,14 @@ function buildActivityQuery(options) {
 
 function formatActivityRow(activity) {
   return {
-    id: String(activity.id || "-"),
-    type: String(activity.type || "-"),
+    billed: formatBoolean(activity.billed),
     date: String(activity.date || "-"),
     hours: readHours(activity),
-    total: formatMoney(activity.total),
-    billed: formatBoolean(activity.billed),
+    id: String(activity.id || "-"),
     matter: readMatterLabel(activity.matter),
     note: String(activity.note || "-"),
+    total: formatMoney(activity.total),
+    type: String(activity.type || "-"),
   };
 }
 
@@ -142,13 +139,6 @@ function printActivity(activity) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
-
 async function fetchMatterIdsForClient(config, accessToken, clientId) {
   const matterQuery = {
     client_id: clientId,
@@ -156,7 +146,8 @@ async function fetchMatterIdsForClient(config, accessToken, clientId) {
     limit: 200,
   };
   const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchMattersPage(config, accessToken, pageQuery, nextPageUrl),
+    (pageQuery, nextPageUrl) =>
+      fetchResourcePage(config, accessToken, MATTER_RESOURCE.apiPath, pageQuery, nextPageUrl),
     matterQuery,
     true
   );
@@ -215,7 +206,8 @@ async function fetchActivitiesForClient(config, accessToken, query, options) {
       page_token: undefined,
     });
     const result = await fetchPages(
-      (pageQuery, nextPageUrl) => fetchActivitiesPage(config, accessToken, pageQuery, nextPageUrl),
+      (pageQuery, nextPageUrl) =>
+        fetchResourcePage(config, accessToken, ACTIVITY_RESOURCE.apiPath, pageQuery, nextPageUrl),
       matterQuery,
       Boolean(options.all)
     );
@@ -240,114 +232,105 @@ async function fetchActivitiesForClient(config, accessToken, query, options) {
   };
 }
 
-async function activitiesList(options = {}) {
-  const query = buildActivityQuery(options);
-  const { config, accessToken } = await getAuthContext();
-
+async function fetchActivityListResult({ accessToken, apiPath, config, options, query }) {
   if (options.clientId && !options.matterId) {
     const clientResult = await fetchActivitiesForClient(config, accessToken, query, options);
-    const data = maybeRedactData(clientResult.data, options, "activity");
-
-    if (options.json) {
-      console.log(
-        JSON.stringify(
-          {
-            data,
-            meta: {
-              client_id: options.clientId,
-              activity_pages_fetched: clientResult.activityPagesFetched,
-              matter_count: clientResult.matterCount,
-              matter_pages_fetched: clientResult.matterLookupPagesFetched,
-              more_results_available: clientResult.moreResultsAvailable,
-              returned_count: data.length,
-            },
-          },
-          null,
-          2
-        )
-      );
-      return;
-    }
-
-    const rows = data.map(formatActivityRow);
-    printActivityList(rows, {
-      all: Boolean(options.all),
-      nextPageUrl: clientResult.moreResultsAvailable ? "client-derived" : null,
-      pageTokenSupported: false,
-    });
-    console.log("");
-    console.log(
-      `Returned ${rows.length} activit${rows.length === 1 ? "y" : "ies"} across ${clientResult.activityPagesFetched} activity page${clientResult.activityPagesFetched === 1 ? "" : "s"} for ${clientResult.matterCount} matter${clientResult.matterCount === 1 ? "" : "s"}.`
-    );
-    return;
-  }
-
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchActivitiesPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "activity");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "activity");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
+    return {
+      data: clientResult.data,
+      extraMeta: {
+        activity_pages_fetched: clientResult.activityPagesFetched,
+        client_id: options.clientId,
+        matter_count: clientResult.matterCount,
+        matter_pages_fetched: clientResult.matterLookupPagesFetched,
+        more_results_available: clientResult.moreResultsAvailable,
+      },
+      firstPage: {
+        data: clientResult.data,
+        meta: {
+          paging: {
+            next: clientResult.moreResultsAvailable ? "client-derived" : null,
           },
         },
-        null,
-        2
-      )
+      },
+      nextPageUrl: clientResult.moreResultsAvailable ? "client-derived" : null,
+      pageTokenSupported: false,
+      pagesFetched: clientResult.activityPagesFetched,
+      summaryMode: "client-derived",
+    };
+  }
+
+  return {
+    ...(await fetchDefaultListResult({
+      accessToken,
+      apiPath,
+      config,
+      options,
+      query,
+    })),
+    pageTokenSupported: true,
+    summaryMode: "default",
+  };
+}
+
+function buildActivityJsonMeta({ result }) {
+  return result.extraMeta || {};
+}
+
+function buildActivityListPrintOptions({ options, result }) {
+  return {
+    all: Boolean(options.all),
+    nextPageUrl: result.nextPageUrl,
+    pageTokenSupported: result.pageTokenSupported,
+  };
+}
+
+function printActivitySummary({ result, rows }) {
+  if (result.summaryMode === "client-derived") {
+    console.log(
+      `Returned ${rows.length} activit${rows.length === 1 ? "y" : "ies"} across ${result.pagesFetched} activity page${result.pagesFetched === 1 ? "" : "s"} for ${result.extraMeta.matter_count} matter${result.extraMeta.matter_count === 1 ? "" : "s"}.`
     );
     return;
   }
 
-  const rows = maybeRedactData(result.data, options, "activity").map(formatActivityRow);
-  printActivityList(rows, {
-    all: Boolean(options.all),
-    nextPageUrl: result.nextPageUrl,
-    pageTokenSupported: true,
-  });
-  console.log("");
   console.log(
-    `Returned ${rows.length} activit${rows.length === 1 ? "y" : "ies"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
+    buildSummaryMessage(
+      rows.length,
+      result.pagesFetched,
+      ACTIVITY_RESOURCE.summaryLabels.singular,
+      ACTIVITY_RESOURCE.summaryLabels.plural
+    )
   );
 }
 
-async function activitiesGet(options = {}) {
-  if (!options.id) {
-    throw new Error("Usage: not-manage activities get <id> [--fields ...] [--json]");
-  }
+const activitiesList = createListCommand({
+  apiPath: ACTIVITY_RESOURCE.apiPath,
+  buildJsonMeta: buildActivityJsonMeta,
+  buildListPrintOptions: buildActivityListPrintOptions,
+  buildQuery: buildActivityQuery,
+  fetchListResult: fetchActivityListResult,
+  formatRow: formatActivityRow,
+  pluralLabel: ACTIVITY_RESOURCE.summaryLabels.plural,
+  printList: printActivityList,
+  printSummary: printActivitySummary,
+  redactionResourceType: ACTIVITY_RESOURCE.redaction.resourceType,
+  singularLabel: ACTIVITY_RESOURCE.summaryLabels.singular,
+});
 
-  const { config, accessToken } = await getAuthContext();
-  const payload = await fetchActivity(config, accessToken, options.id, {
-    fields: options.fields || DEFAULT_GET_FIELDS,
-  });
-  const redactedPayload = maybeRedactPayload(payload, options, "activity");
-
-  if (options.json) {
-    console.log(JSON.stringify(redactedPayload, null, 2));
-    return;
-  }
-
-  printActivity(redactedPayload?.data || {});
-}
+const activitiesGet = createGetCommand({
+  apiPath: ACTIVITY_RESOURCE.apiPath,
+  defaultFields: ACTIVITY_RESOURCE.defaultFields.get,
+  printItem: printActivity,
+  redactionResourceType: ACTIVITY_RESOURCE.redaction.resourceType,
+  usage: "Usage: not-manage activities get <id> [--fields ...] [--json]",
+});
 
 module.exports = {
   activitiesGet,
   activitiesList,
   __private: {
     buildActivityQuery,
+    fetchActivitiesForClient,
+    fetchMatterIdsForClient,
     formatActivityRow,
     printActivity,
     printActivityList,

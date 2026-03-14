@@ -1,25 +1,16 @@
 const {
-  fetchMatter,
-  fetchMattersPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatBoolean,
   parseLimit,
   printKeyValueRows,
   readContactName,
   readUserName,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createGetCommand, createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,display_number,number,description,status,billable,open_date,close_date,pending_date,client{id,name,first_name,last_name},practice_area{id,name},responsible_attorney{id,name,email},responsible_staff{id,name,email},originating_attorney{id,name,email},created_at,updated_at";
-const DEFAULT_GET_FIELDS =
-  "id,display_number,number,description,status,billable,open_date,close_date,pending_date,client{id,name,first_name,last_name},practice_area{id,name},responsible_attorney{id,name,email},responsible_staff{id,name,email},originating_attorney{id,name,email},created_at,updated_at";
+const MATTER_RESOURCE = getResourceMetadata("matters");
 
 function readStatus(status) {
   if (!status) {
@@ -65,7 +56,7 @@ function buildMatterQuery(options) {
   return compactQuery({
     client_id: options.clientId || undefined,
     created_since: options.createdSince || undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || MATTER_RESOURCE.defaultFields.list,
     limit: parseLimit(options.limit),
     order: options.order || undefined,
     originating_attorney_id: options.originatingAttorneyId || undefined,
@@ -135,72 +126,23 @@ function printMatter(matter) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
+const mattersList = createListCommand({
+  apiPath: MATTER_RESOURCE.apiPath,
+  buildQuery: buildMatterQuery,
+  formatRow: formatMatterRow,
+  pluralLabel: MATTER_RESOURCE.summaryLabels.plural,
+  printList: printMatterList,
+  redactionResourceType: MATTER_RESOURCE.redaction.resourceType,
+  singularLabel: MATTER_RESOURCE.summaryLabels.singular,
+});
 
-async function mattersList(options = {}) {
-  const query = buildMatterQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchMattersPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "matter");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "matter");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "matter").map(formatMatterRow);
-  printMatterList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} matter${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
-
-async function mattersGet(options = {}) {
-  if (!options.id) {
-    throw new Error("Usage: not-manage matters get <id> [--fields ...] [--json]");
-  }
-
-  const { config, accessToken } = await getAuthContext();
-  const payload = await fetchMatter(config, accessToken, options.id, {
-    fields: options.fields || DEFAULT_GET_FIELDS,
-  });
-  const redactedPayload = maybeRedactPayload(payload, options, "matter");
-
-  if (options.json) {
-    console.log(JSON.stringify(redactedPayload, null, 2));
-    return;
-  }
-
-  printMatter(redactedPayload?.data || {});
-}
+const mattersGet = createGetCommand({
+  apiPath: MATTER_RESOURCE.apiPath,
+  defaultFields: MATTER_RESOURCE.defaultFields.get,
+  printItem: printMatter,
+  redactionResourceType: MATTER_RESOURCE.redaction.resourceType,
+  usage: "Usage: not-manage matters get <id> [--fields ...] [--json]",
+});
 
 module.exports = {
   mattersGet,

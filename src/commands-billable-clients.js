@@ -1,26 +1,20 @@
 const {
-  fetchBillableClientsPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatMoney,
   parseLimit,
   printKeyValueRows,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,name,unbilled_hours,unbilled_amount,amount_in_trust,billable_matters_count";
+const BILLABLE_CLIENT_RESOURCE = getResourceMetadata("billable-clients");
 
 function buildBillableClientQuery(options) {
   return compactQuery({
     client_id: options.clientId || undefined,
     end_date: options.endDate || undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || BILLABLE_CLIENT_RESOURCE.defaultFields.list,
     limit: parseLimit(options.limit, 25),
     matter_id: options.matterId || undefined,
     originating_attorney_id: options.originatingAttorneyId || undefined,
@@ -33,15 +27,15 @@ function buildBillableClientQuery(options) {
 
 function formatBillableClientRow(record) {
   return {
-    id: String(record.id || "-"),
-    name: String(record.name || "-"),
+    amount: formatMoney(record.unbilled_amount),
     hours:
       record.unbilled_hours === undefined || record.unbilled_hours === null
         ? "-"
         : Number(record.unbilled_hours).toFixed(2),
-    amount: formatMoney(record.unbilled_amount),
-    trust: formatMoney(record.amount_in_trust),
+    id: String(record.id || "-"),
     matters: String(record.billable_matters_count ?? "-"),
+    name: String(record.name || "-"),
+    trust: formatMoney(record.amount_in_trust),
   };
 }
 
@@ -90,56 +84,15 @@ function printBillableClient(record) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
-
-async function billableClientsList(options = {}) {
-  const query = buildBillableClientQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) =>
-      fetchBillableClientsPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "billable-client");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "billable-client");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "billable-client").map(
-    formatBillableClientRow
-  );
-  printBillableClientList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} billable client${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
+const billableClientsList = createListCommand({
+  apiPath: BILLABLE_CLIENT_RESOURCE.apiPath,
+  buildQuery: buildBillableClientQuery,
+  formatRow: formatBillableClientRow,
+  pluralLabel: BILLABLE_CLIENT_RESOURCE.summaryLabels.plural,
+  printList: printBillableClientList,
+  redactionResourceType: BILLABLE_CLIENT_RESOURCE.redaction.resourceType,
+  singularLabel: BILLABLE_CLIENT_RESOURCE.summaryLabels.singular,
+});
 
 module.exports = {
   billableClientsList,

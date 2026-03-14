@@ -1,24 +1,15 @@
 const {
-  fetchUser,
-  fetchUsersPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatBoolean,
   parseLimit,
   printKeyValueRows,
   readUserName,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createGetCommand, createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,name,first_name,last_name,email,enabled,roles,subscription_type,phone_number,time_zone,rate,account_owner,clio_connect,court_rules_default_attendee,created_at,updated_at";
-const DEFAULT_GET_FIELDS =
-  "id,name,first_name,last_name,email,enabled,roles,subscription_type,phone_number,time_zone,rate,account_owner,clio_connect,court_rules_default_attendee,created_at,updated_at";
+const USER_RESOURCE = getResourceMetadata("users");
 
 function readRoleList(user) {
   const roles = Array.isArray(user?.roles) ? user.roles : [];
@@ -35,7 +26,7 @@ function buildUserQuery(options) {
       options.enabled === undefined || options.enabled === null
         ? undefined
         : Boolean(options.enabled),
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || USER_RESOURCE.defaultFields.list,
     include_co_counsel: options.includeCoCounsel ? true : undefined,
     limit: parseLimit(options.limit, 2000),
     name: options.name || undefined,
@@ -113,72 +104,23 @@ function printUser(user) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
+const usersList = createListCommand({
+  apiPath: USER_RESOURCE.apiPath,
+  buildQuery: buildUserQuery,
+  formatRow: formatUserRow,
+  pluralLabel: USER_RESOURCE.summaryLabels.plural,
+  printList: printUserList,
+  redactionResourceType: USER_RESOURCE.redaction.resourceType,
+  singularLabel: USER_RESOURCE.summaryLabels.singular,
+});
 
-async function usersList(options = {}) {
-  const query = buildUserQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchUsersPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "user");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "user");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "user").map(formatUserRow);
-  printUserList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} user${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
-
-async function usersGet(options = {}) {
-  if (!options.id) {
-    throw new Error("Usage: not-manage users get <id> [--fields ...] [--json]");
-  }
-
-  const { config, accessToken } = await getAuthContext();
-  const payload = await fetchUser(config, accessToken, options.id, {
-    fields: options.fields || DEFAULT_GET_FIELDS,
-  });
-  const redactedPayload = maybeRedactPayload(payload, options, "user");
-
-  if (options.json) {
-    console.log(JSON.stringify(redactedPayload, null, 2));
-    return;
-  }
-
-  printUser(redactedPayload?.data || {});
-}
+const usersGet = createGetCommand({
+  apiPath: USER_RESOURCE.apiPath,
+  defaultFields: USER_RESOURCE.defaultFields.get,
+  printItem: printUser,
+  redactionResourceType: USER_RESOURCE.redaction.resourceType,
+  usage: "Usage: not-manage users get <id> [--fields ...] [--json]",
+});
 
 module.exports = {
   usersGet,

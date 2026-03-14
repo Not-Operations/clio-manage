@@ -1,24 +1,15 @@
 const {
-  fetchContact,
-  fetchContactsPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatBoolean,
   parseLimit,
   printKeyValueRows,
   readContactName,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createGetCommand, createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,name,first_name,last_name,type,is_client,primary_email_address,secondary_email_address,primary_phone_number,secondary_phone_number,clio_connect_email,title,prefix,created_at,updated_at";
-const DEFAULT_GET_FIELDS =
-  "id,name,first_name,last_name,type,is_client,primary_email_address,secondary_email_address,primary_phone_number,secondary_phone_number,clio_connect_email,title,prefix,created_at,updated_at";
+const CONTACT_RESOURCE = getResourceMetadata("contacts");
 
 function buildContactQuery(options) {
   return compactQuery({
@@ -26,7 +17,7 @@ function buildContactQuery(options) {
     clio_connect_only: options.clioConnectOnly ? true : undefined,
     created_since: options.createdSince || undefined,
     email_only: options.emailOnly ? true : undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || CONTACT_RESOURCE.defaultFields.list,
     initial: options.initial || undefined,
     limit: parseLimit(options.limit),
     order: options.order || undefined,
@@ -100,72 +91,23 @@ function printContact(contact) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
+const contactsList = createListCommand({
+  apiPath: CONTACT_RESOURCE.apiPath,
+  buildQuery: buildContactQuery,
+  formatRow: formatContactRow,
+  pluralLabel: CONTACT_RESOURCE.summaryLabels.plural,
+  printList: printContactList,
+  redactionResourceType: CONTACT_RESOURCE.redaction.resourceType,
+  singularLabel: CONTACT_RESOURCE.summaryLabels.singular,
+});
 
-async function contactsList(options = {}) {
-  const query = buildContactQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchContactsPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "contact");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "contact");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "contact").map(formatContactRow);
-  printContactList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} contact${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
-
-async function contactsGet(options = {}) {
-  if (!options.id) {
-    throw new Error("Usage: not-manage contacts get <id> [--fields ...] [--json]");
-  }
-
-  const { config, accessToken } = await getAuthContext();
-  const payload = await fetchContact(config, accessToken, options.id, {
-    fields: options.fields || DEFAULT_GET_FIELDS,
-  });
-  const redactedPayload = maybeRedactPayload(payload, options, "contact");
-
-  if (options.json) {
-    console.log(JSON.stringify(redactedPayload, null, 2));
-    return;
-  }
-
-  printContact(redactedPayload?.data || {});
-}
+const contactsGet = createGetCommand({
+  apiPath: CONTACT_RESOURCE.apiPath,
+  defaultFields: CONTACT_RESOURCE.defaultFields.get,
+  printItem: printContact,
+  redactionResourceType: CONTACT_RESOURCE.redaction.resourceType,
+  usage: "Usage: not-manage contacts get <id> [--fields ...] [--json]",
+});
 
 module.exports = {
   contactsGet,

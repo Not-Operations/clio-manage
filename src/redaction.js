@@ -1,9 +1,5 @@
-const CLIENT_OBJECT_KEYS = new Set(["client", "clients", "contact", "contacts"]);
-const CONTACT_LIKE_RESOURCE_TYPES = new Set(["contact", "billable-client"]);
-const SAFE_IDENTITY_RESOURCE_TYPES = new Set(["user"]);
-const FREE_TEXT_FIELDS = new Set(["description", "memo", "note", "reference", "subject"]);
-const LABEL_FIELDS = new Set(["display_number", "number", "identifier", "title"]);
-const MATTER_LABEL_FIELDS = new Set(["display_number", "number"]);
+const { getRedactionPolicy } = require("./redaction-policy");
+
 const NAME_FIELDS = new Set(["name", "first_name", "last_name"]);
 const EMAIL_FIELDS = new Set([
   "email",
@@ -15,14 +11,6 @@ const PHONE_FIELDS = new Set([
   "phone_number",
   "primary_phone_number",
   "secondary_phone_number",
-]);
-const SAFE_IDENTITY_OBJECT_KEYS = new Set([
-  "user",
-  "assignee",
-  "assigner",
-  "responsible_attorney",
-  "responsible_staff",
-  "originating_attorney",
 ]);
 const NAME_HEURISTIC_EXCLUDED_TOKENS = new Set([
   "activity",
@@ -99,14 +87,6 @@ function isObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 
-function isContactLikeResourceType(resourceType) {
-  return CONTACT_LIKE_RESOURCE_TYPES.has(resourceType);
-}
-
-function isSafeIdentityResourceType(resourceType) {
-  return SAFE_IDENTITY_RESOURCE_TYPES.has(resourceType);
-}
-
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -155,7 +135,7 @@ function collectContactLikeReplacements(node, replacements, dedupe) {
 function collectSensitiveReplacements(
   value,
   resourceType,
-  contactLikeContext = isContactLikeResourceType(resourceType),
+  contactLikeContext = getRedactionPolicy(resourceType).contactLikeResource,
   replacements = [],
   dedupe = new Set()
 ) {
@@ -174,8 +154,11 @@ function collectSensitiveReplacements(
     collectContactLikeReplacements(value, replacements, dedupe);
   }
 
+  const policy = getRedactionPolicy(resourceType);
+
   Object.entries(value).forEach(([key, child]) => {
-    const childContactLikeContext = contactLikeContext || CLIENT_OBJECT_KEYS.has(key);
+    const childContactLikeContext =
+      contactLikeContext || policy.clientObjectKeys.has(key);
     collectSensitiveReplacements(
       child,
       resourceType,
@@ -199,12 +182,13 @@ function pushPreservedName(preserved, value) {
 
 function collectSafeIdentityNames(
   value,
+  policy,
   safeIdentityContext = false,
   preserved = new Set()
 ) {
   if (Array.isArray(value)) {
     value.forEach((item) => {
-      collectSafeIdentityNames(item, safeIdentityContext, preserved);
+      collectSafeIdentityNames(item, policy, safeIdentityContext, preserved);
     });
     return preserved;
   }
@@ -227,7 +211,8 @@ function collectSafeIdentityNames(
   Object.entries(value).forEach(([key, child]) => {
     collectSafeIdentityNames(
       child,
-      safeIdentityContext || SAFE_IDENTITY_OBJECT_KEYS.has(key),
+      policy,
+      safeIdentityContext || policy.safeIdentityObjectKeys.has(key),
       preserved
     );
   });
@@ -255,13 +240,20 @@ function derivePersonSurname(name) {
 
 function collectPersonClientLabelReplacements(
   value,
+  policy,
   clientContext = false,
   replacements = [],
   dedupe = new Set()
 ) {
   if (Array.isArray(value)) {
     value.forEach((item) => {
-      collectPersonClientLabelReplacements(item, clientContext, replacements, dedupe);
+      collectPersonClientLabelReplacements(
+        item,
+        policy,
+        clientContext,
+        replacements,
+        dedupe
+      );
     });
     return replacements;
   }
@@ -282,7 +274,8 @@ function collectPersonClientLabelReplacements(
   Object.entries(value).forEach(([key, child]) => {
     collectPersonClientLabelReplacements(
       child,
-      clientContext || CLIENT_OBJECT_KEYS.has(key),
+      policy,
+      clientContext || policy.clientObjectKeys.has(key),
       replacements,
       dedupe
     );
@@ -403,11 +396,12 @@ function replaceMatterLabelDerivedNames(text, replacements) {
     }, String(text));
 }
 
-function isMatterLabelContext(path, key) {
-  return path[path.length - 1] === "matter" && MATTER_LABEL_FIELDS.has(key);
+function isMatterLabelContext(policy, path, key) {
+  return path[path.length - 1] === "matter" && policy.matterLabelFields.has(key);
 }
 
 function redactStringValue(
+  policy,
   text,
   key,
   replacements,
@@ -420,11 +414,11 @@ function redactStringValue(
   output = replaceKnownSensitiveValues(output, replacements);
   output = redactPatternPii(output);
 
-  if (isMatterLabelContext(path, key)) {
+  if (isMatterLabelContext(policy, path, key)) {
     output = replaceMatterLabelDerivedNames(output, derivedLabelReplacements);
   }
 
-  if (FREE_TEXT_FIELDS.has(key) || LABEL_FIELDS.has(key)) {
+  if (policy.freeTextFields.has(key) || policy.labelFields.has(key)) {
     output = redactLikelyBareNames(output, preservedNames);
   }
 
@@ -441,6 +435,8 @@ function redactValue(
   safeIdentityContext = false,
   path = []
 ) {
+  const policy = getRedactionPolicy(resourceType);
+
   if (Array.isArray(value)) {
     return value.map((item) =>
       redactValue(
@@ -487,6 +483,7 @@ function redactValue(
       output[key] = safeIdentityContext
         ? child
         : redactStringValue(
+            policy,
             child,
             key,
             replacements,
@@ -500,11 +497,11 @@ function redactValue(
     output[key] = redactValue(
       child,
       resourceType,
-      contactLikeContext || CLIENT_OBJECT_KEYS.has(key),
+      contactLikeContext || policy.clientObjectKeys.has(key),
       replacements,
       preservedNames,
       derivedLabelReplacements,
-      safeIdentityContext || SAFE_IDENTITY_OBJECT_KEYS.has(key),
+      safeIdentityContext || policy.safeIdentityObjectKeys.has(key),
       path.concat(key)
     );
   });
@@ -513,20 +510,22 @@ function redactValue(
 }
 
 function redactPayload(value, resourceType) {
+  const policy = getRedactionPolicy(resourceType);
   const replacements = collectSensitiveReplacements(value, resourceType);
-  const derivedLabelReplacements = collectPersonClientLabelReplacements(value);
+  const derivedLabelReplacements = collectPersonClientLabelReplacements(value, policy);
   const preservedNames = collectSafeIdentityNames(
     value,
-    isSafeIdentityResourceType(resourceType)
+    policy,
+    policy.safeIdentityResource
   );
   return redactValue(
     value,
     resourceType,
-    isContactLikeResourceType(resourceType),
+    policy.contactLikeResource,
     replacements,
     preservedNames,
     derivedLabelReplacements,
-    isSafeIdentityResourceType(resourceType)
+    policy.safeIdentityResource
   );
 }
 

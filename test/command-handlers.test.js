@@ -17,10 +17,14 @@ function escapeRegExp(value) {
 }
 
 function loadCommandModule(spec, overrides = {}) {
+  const runnerPath = require.resolve(path.join(ROOT, "src/resource-command-runner.js"));
+  const originalRunner = require.cache[runnerPath];
+  delete require.cache[runnerPath];
+
   const apiMock = {
+    fetchResourceById: async () => ({ data: {} }),
+    fetchResourcePage: async () => buildPage([]),
     getValidAccessToken: async () => "fresh-token",
-    [spec.fetchPageExport]: async () => buildPage([]),
-    [spec.fetchItemExport]: async () => ({ data: {} }),
     ...overrides,
   };
 
@@ -32,17 +36,38 @@ function loadCommandModule(spec, overrides = {}) {
     },
   });
 
-  return { apiMock, module, restore };
+  return {
+    apiMock,
+    module,
+    restore() {
+      restore();
+      delete require.cache[runnerPath];
+      if (originalRunner) {
+        require.cache[runnerPath] = originalRunner;
+      }
+    },
+  };
+}
+
+function buildListEnvelope(data, nextPageUrl = null, extraMeta = {}) {
+  return {
+    data,
+    meta: {
+      next_page_url: nextPageUrl,
+      pages_fetched: 1,
+      returned_count: data.length,
+      ...extraMeta,
+    },
+  };
 }
 
 const specs = [
   {
+    apiPath: "activities",
     name: "activities",
     moduleFile: "src/commands-activities.js",
     listExport: "activitiesList",
     getExport: "activitiesGet",
-    fetchPageExport: "fetchActivitiesPage",
-    fetchItemExport: "fetchActivity",
     emptyMessage: "No activities found for the selected filters.",
     usageMessage: "Usage: not-manage activities get <id> [--fields ...] [--json]",
     listOptions: { status: "unbilled", limit: "5" },
@@ -77,12 +102,11 @@ const specs = [
     ],
   },
   {
+    apiPath: "contacts",
     name: "contacts",
     moduleFile: "src/commands-contacts.js",
     listExport: "contactsList",
     getExport: "contactsGet",
-    fetchPageExport: "fetchContactsPage",
-    fetchItemExport: "fetchContact",
     emptyMessage: "No contacts found for the selected filters.",
     usageMessage: "Usage: not-manage contacts get <id> [--fields ...] [--json]",
     listOptions: { clientOnly: true, limit: "5" },
@@ -110,12 +134,11 @@ const specs = [
     ],
   },
   {
+    apiPath: "tasks",
     name: "tasks",
     moduleFile: "src/commands-tasks.js",
     listExport: "tasksList",
     getExport: "tasksGet",
-    fetchPageExport: "fetchTasksPage",
-    fetchItemExport: "fetchTask",
     emptyMessage: "No tasks found for the selected filters.",
     usageMessage: "Usage: not-manage tasks get <id> [--fields ...] [--json]",
     listOptions: { matterId: "303", limit: "5" },
@@ -143,12 +166,11 @@ const specs = [
     ],
   },
   {
+    apiPath: "bills",
     name: "bills",
     moduleFile: "src/commands-bills.js",
     listExport: "billsList",
     getExport: "billsGet",
-    fetchPageExport: "fetchBillsPage",
-    fetchItemExport: "fetchBill",
     emptyMessage: "No bills found for the selected filters.",
     usageMessage: "Usage: not-manage bills get <id> [--fields ...] [--json]",
     listOptions: { overdueOnly: true, limit: "5" },
@@ -183,12 +205,11 @@ const specs = [
     ],
   },
   {
+    apiPath: "matters",
     name: "matters",
     moduleFile: "src/commands-matters.js",
     listExport: "mattersList",
     getExport: "mattersGet",
-    fetchPageExport: "fetchMattersPage",
-    fetchItemExport: "fetchMatter",
     emptyMessage: "No matters found for the selected filters.",
     usageMessage: "Usage: not-manage matters get <id> [--fields ...] [--json]",
     listOptions: { practiceAreaId: "77", limit: "5" },
@@ -225,12 +246,11 @@ const specs = [
     ],
   },
   {
+    apiPath: "users",
     name: "users",
     moduleFile: "src/commands-users.js",
     listExport: "usersList",
     getExport: "usersGet",
-    fetchPageExport: "fetchUsersPage",
-    fetchItemExport: "fetchUser",
     emptyMessage: "No users found for the selected filters.",
     usageMessage: "Usage: not-manage users get <id> [--fields ...] [--json]",
     listOptions: { enabled: false, pendingSetup: false, limit: "5" },
@@ -261,12 +281,11 @@ const specs = [
     ],
   },
   {
+    apiPath: "practice_areas",
     name: "practice areas",
     moduleFile: "src/commands-practice-areas.js",
     listExport: "practiceAreasList",
     getExport: "practiceAreasGet",
-    fetchPageExport: "fetchPracticeAreasPage",
-    fetchItemExport: "fetchPracticeArea",
     emptyMessage: "No practice areas found for the selected filters.",
     usageMessage: "Usage: not-manage practice-areas get <id> [--fields ...] [--json]",
     listOptions: { name: "Family", limit: "5" },
@@ -291,7 +310,7 @@ const specs = [
 for (const spec of specs) {
   test(`${spec.name} list prints an empty state and summary`, async () => {
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchPageExport]: async () => buildPage([]),
+      fetchResourcePage: async () => buildPage([]),
     });
 
     try {
@@ -305,7 +324,7 @@ for (const spec of specs) {
 
   test(`${spec.name} list prints formatted table output`, async () => {
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchPageExport]: async () => buildPage([spec.sample]),
+      fetchResourcePage: async () => buildPage([spec.sample]),
     });
 
     try {
@@ -322,14 +341,17 @@ for (const spec of specs) {
   test(`${spec.name} list supports first-page JSON output`, async () => {
     const payload = buildPage([spec.sample], "https://next-page.test");
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchPageExport]: async () => payload,
+      fetchResourcePage: async () => payload,
     });
 
     try {
       const { logs } = await captureConsole(() =>
         module[spec.listExport]({ ...spec.listOptions, json: true })
       );
-      assert.deepStrictEqual(JSON.parse(logs.join("\n")), payload);
+      assert.deepStrictEqual(
+        JSON.parse(logs.join("\n")),
+        buildListEnvelope([spec.sample], "https://next-page.test")
+      );
     } finally {
       restore();
     }
@@ -340,8 +362,8 @@ for (const spec of specs) {
     const pageOne = buildPage([spec.sample], "https://next-page.test");
     const pageTwo = buildPage([{ ...spec.sample, id: `${spec.getId}-2` }]);
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchPageExport]: async (config, accessToken, query, nextPageUrl) => {
-        calls.push({ accessToken, config, nextPageUrl, query });
+      fetchResourcePage: async (config, accessToken, apiPath, query, nextPageUrl) => {
+        calls.push({ accessToken, apiPath, config, nextPageUrl, query });
         return nextPageUrl ? pageTwo : pageOne;
       },
     });
@@ -353,12 +375,14 @@ for (const spec of specs) {
       assert.deepStrictEqual(calls, [
         {
           accessToken: "fresh-token",
+          apiPath: spec.apiPath,
           config: BASE_CONFIG,
           nextPageUrl: undefined,
           query: calls[0].query,
         },
         {
           accessToken: "fresh-token",
+          apiPath: spec.apiPath,
           config: BASE_CONFIG,
           nextPageUrl: "https://next-page.test",
           query: {},
@@ -389,7 +413,7 @@ for (const spec of specs) {
 
   test(`${spec.name} get prints detail output`, async () => {
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchItemExport]: async () => ({ data: spec.sample }),
+      fetchResourceById: async () => ({ data: spec.sample }),
     });
 
     try {
@@ -408,7 +432,7 @@ for (const spec of specs) {
   test(`${spec.name} get supports JSON output`, async () => {
     const payload = { data: spec.sample };
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchItemExport]: async () => payload,
+      fetchResourceById: async () => payload,
     });
 
     try {
@@ -440,7 +464,7 @@ for (const spec of specs) {
 
   test(`${spec.name} list propagates permission failures`, async () => {
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchPageExport]: async () => {
+      fetchResourcePage: async () => {
         throw new Error("HTTP 403 from https://app.clio.com/api/v4/resource.json");
       },
     });
@@ -454,7 +478,7 @@ for (const spec of specs) {
 
   test(`${spec.name} list propagates rate-limit failures`, async () => {
     const { module, restore } = loadCommandModule(spec, {
-      [spec.fetchPageExport]: async () => {
+      fetchResourcePage: async () => {
         throw new Error("HTTP 429 from https://app.clio.com/api/v4/resource.json");
       },
     });
@@ -471,8 +495,8 @@ test("bills list normalizes unpaid status to awaiting_payment state", async () =
   const billSpec = specs.find((spec) => spec.name === "bills");
   const fetchCalls = [];
   const { module, restore } = loadCommandModule(billSpec, {
-    fetchBillsPage: async (_config, _accessToken, query) => {
-      fetchCalls.push(query);
+    fetchResourcePage: async (_config, _accessToken, apiPath, query) => {
+      fetchCalls.push({ apiPath, query });
       return buildPage([]);
     },
   });
@@ -483,10 +507,13 @@ test("bills list normalizes unpaid status to awaiting_payment state", async () =
     );
     assert.deepStrictEqual(fetchCalls, [
       {
-        fields:
-          "id,number,state,type,kind,subject,memo,issued_at,due_at,paid,paid_at,pending,due,total,balance,created_at,updated_at,client{id,name,first_name,last_name},matters{id,display_number,number,description}",
-        limit: 5,
-        state: "awaiting_payment",
+        apiPath: "bills",
+        query: {
+          fields:
+            "id,number,state,type,kind,subject,memo,issued_at,due_at,paid,paid_at,pending,due,total,balance,created_at,updated_at,client{id,name,first_name,last_name},matters{id,display_number,number,description}",
+          limit: 5,
+          state: "awaiting_payment",
+        },
       },
     ]);
   } finally {
@@ -499,8 +526,13 @@ test("activities list resolves client ids through the matter collection", async 
   const matterCalls = [];
   const activityCalls = [];
   const { module, restore } = loadCommandModule(activitySpec, {
-    fetchActivitiesPage: async (_config, _accessToken, query) => {
-      activityCalls.push(query);
+    fetchResourcePage: async (_config, _accessToken, apiPath, query, nextPageUrl) => {
+      if (apiPath === "matters") {
+        matterCalls.push({ nextPageUrl, query });
+        return buildPage(nextPageUrl ? [] : [{ id: 303 }, { id: 304 }]);
+      }
+
+      activityCalls.push({ apiPath, query });
       if (query.matter_id === 303) {
         return buildPage([
           {
@@ -520,10 +552,6 @@ test("activities list resolves client ids through the matter collection", async 
           note: "Draft memo",
         },
       ]);
-    },
-    fetchMattersPage: async (_config, _accessToken, query, nextPageUrl) => {
-      matterCalls.push({ nextPageUrl, query });
-      return buildPage(nextPageUrl ? [] : [{ id: 303 }, { id: 304 }]);
     },
   });
 
@@ -548,16 +576,22 @@ test("activities list resolves client ids through the matter collection", async 
     ]);
     assert.deepStrictEqual(activityCalls, [
       {
-        fields:
-          "id,type,date,quantity,quantity_in_hours,rounded_quantity,rounded_quantity_in_hours,price,total,billed,on_bill,non_billable,no_charge,flat_rate,contingency_fee,note,reference,created_at,updated_at,activity_description{id,name},bill{id,number,state},matter{id,display_number,number,description},user{id,name,first_name,last_name,email}",
-        limit: 5,
-        matter_id: 303,
+        apiPath: "activities",
+        query: {
+          fields:
+            "id,type,date,quantity,quantity_in_hours,rounded_quantity,rounded_quantity_in_hours,price,total,billed,on_bill,non_billable,no_charge,flat_rate,contingency_fee,note,reference,created_at,updated_at,activity_description{id,name},bill{id,number,state},matter{id,display_number,number,description},user{id,name,first_name,last_name,email}",
+          limit: 5,
+          matter_id: 303,
+        },
       },
       {
-        fields:
-          "id,type,date,quantity,quantity_in_hours,rounded_quantity,rounded_quantity_in_hours,price,total,billed,on_bill,non_billable,no_charge,flat_rate,contingency_fee,note,reference,created_at,updated_at,activity_description{id,name},bill{id,number,state},matter{id,display_number,number,description},user{id,name,first_name,last_name,email}",
-        limit: 4,
-        matter_id: 304,
+        apiPath: "activities",
+        query: {
+          fields:
+            "id,type,date,quantity,quantity_in_hours,rounded_quantity,rounded_quantity_in_hours,price,total,billed,on_bill,non_billable,no_charge,flat_rate,contingency_fee,note,reference,created_at,updated_at,activity_description{id,name},bill{id,number,state},matter{id,display_number,number,description},user{id,name,first_name,last_name,email}",
+          limit: 4,
+          matter_id: 304,
+        },
       },
     ]);
   } finally {
@@ -568,7 +602,10 @@ test("activities list resolves client ids through the matter collection", async 
 test("activities list rejects page tokens for client-derived filtering", async () => {
   const activitySpec = specs.find((spec) => spec.name === "activities");
   const { module, restore } = loadCommandModule(activitySpec, {
-    fetchMattersPage: async () => buildPage([{ id: 303 }]),
+    fetchResourcePage: async (_config, _accessToken, apiPath) => {
+      assert.equal(apiPath, "matters");
+      return buildPage([{ id: 303 }]);
+    },
   });
 
   try {
@@ -584,8 +621,8 @@ test("activities list rejects page tokens for client-derived filtering", async (
 test("bills list rejects unsupported bill statuses before calling Clio", async () => {
   const billSpec = specs.find((spec) => spec.name === "bills");
   const { module, restore } = loadCommandModule(billSpec, {
-    fetchBillsPage: async () => {
-      throw new Error("fetchBillsPage should not be called for invalid statuses");
+    fetchResourcePage: async () => {
+      throw new Error("fetchResourcePage should not be called for invalid statuses");
     },
   });
 
@@ -604,22 +641,23 @@ test("practice areas list resolves matter ids through the matter detail endpoint
   const fetchPracticeAreaCalls = [];
   const practiceAreaSpec = specs.find((spec) => spec.name === "practice areas");
   const { module, restore } = loadCommandModule(practiceAreaSpec, {
-    fetchMatter: async (_config, _accessToken, id, query) => {
-      fetchMatterCalls.push({ id, query });
-      return {
-        data: {
-          id,
-          practice_area: { id: 505 },
-        },
-      };
-    },
-    fetchPracticeArea: async (_config, _accessToken, id, query) => {
+    fetchResourceById: async (_config, _accessToken, apiPath, id, query) => {
+      if (apiPath === "matters") {
+        fetchMatterCalls.push({ id, query });
+        return {
+          data: {
+            id,
+            practice_area: { id: 505 },
+          },
+        };
+      }
+
       fetchPracticeAreaCalls.push({ id, query });
       return {
         data: practiceAreaSpec.sample,
       };
     },
-    fetchPracticeAreasPage: async () => {
+    fetchResourcePage: async () => {
       throw new Error("practice area collection fetch should not run in matter lookup mode");
     },
   });
@@ -654,10 +692,10 @@ test("practice areas list resolves matter ids through the matter detail endpoint
 
 const billableSpecs = [
   {
+    apiPath: "billable_matters",
     name: "billable matters",
     moduleFile: "src/commands-billable-matters.js",
     listExport: "billableMattersList",
-    fetchPageExport: "fetchBillableMattersPage",
     emptyMessage: "No billable matters found for the selected filters.",
     listOptions: { limit: "5", query: "CLI" },
     sample: {
@@ -671,10 +709,10 @@ const billableSpecs = [
     listFragments: ["MAT-700", "Acme LLC", "1.75", "350.00", "50.00"],
   },
   {
+    apiPath: "billable_clients",
     name: "billable clients",
     moduleFile: "src/commands-billable-clients.js",
     listExport: "billableClientsList",
-    fetchPageExport: "fetchBillableClientsPage",
     emptyMessage: "No billable clients found for the selected filters.",
     listOptions: { limit: "5", query: "CLI" },
     sample: {
@@ -691,15 +729,8 @@ const billableSpecs = [
 
 for (const spec of billableSpecs) {
   test(`${spec.name} list prints an empty state and summary`, async () => {
-    const { module, restore } = loadWithMocks(path.join(ROOT, spec.moduleFile), {
-      "./clio-api": {
-        getValidAccessToken: async () => "fresh-token",
-        [spec.fetchPageExport]: async () => buildPage([]),
-      },
-      "./store": {
-        getConfig: async () => BASE_CONFIG,
-        getTokenSet: async () => BASE_TOKEN_SET,
-      },
+    const { module, restore } = loadCommandModule(spec, {
+      fetchResourcePage: async () => buildPage([]),
     });
 
     try {
@@ -712,15 +743,8 @@ for (const spec of billableSpecs) {
   });
 
   test(`${spec.name} list prints formatted table output`, async () => {
-    const { module, restore } = loadWithMocks(path.join(ROOT, spec.moduleFile), {
-      "./clio-api": {
-        getValidAccessToken: async () => "fresh-token",
-        [spec.fetchPageExport]: async () => buildPage([spec.sample]),
-      },
-      "./store": {
-        getConfig: async () => BASE_CONFIG,
-        getTokenSet: async () => BASE_TOKEN_SET,
-      },
+    const { module, restore } = loadCommandModule(spec, {
+      fetchResourcePage: async () => buildPage([spec.sample]),
     });
 
     try {
@@ -736,22 +760,18 @@ for (const spec of billableSpecs) {
 
   test(`${spec.name} list supports JSON output`, async () => {
     const payload = buildPage([spec.sample], "https://next-page.test");
-    const { module, restore } = loadWithMocks(path.join(ROOT, spec.moduleFile), {
-      "./clio-api": {
-        getValidAccessToken: async () => "fresh-token",
-        [spec.fetchPageExport]: async () => payload,
-      },
-      "./store": {
-        getConfig: async () => BASE_CONFIG,
-        getTokenSet: async () => BASE_TOKEN_SET,
-      },
+    const { module, restore } = loadCommandModule(spec, {
+      fetchResourcePage: async () => payload,
     });
 
     try {
       const { logs } = await captureConsole(() =>
         module[spec.listExport]({ ...spec.listOptions, json: true })
       );
-      assert.deepStrictEqual(JSON.parse(logs.join("\n")), payload);
+      assert.deepStrictEqual(
+        JSON.parse(logs.join("\n")),
+        buildListEnvelope([spec.sample], "https://next-page.test")
+      );
     } finally {
       restore();
     }
@@ -761,7 +781,7 @@ for (const spec of billableSpecs) {
 test("contacts list redacts contact PII in table output", async () => {
   const contactSpec = specs.find((spec) => spec.name === "contacts");
   const { module, restore } = loadCommandModule(contactSpec, {
-    fetchContactsPage: async () => buildPage([contactSpec.sample]),
+    fetchResourcePage: async () => buildPage([contactSpec.sample]),
   });
 
   try {
@@ -784,7 +804,7 @@ test("contacts get redacts structured PII in JSON output", async () => {
   const contactSpec = specs.find((spec) => spec.name === "contacts");
   const payload = { data: contactSpec.sample };
   const { module, restore } = loadCommandModule(contactSpec, {
-    fetchContact: async () => payload,
+    fetchResourceById: async () => payload,
   });
 
   try {
@@ -814,7 +834,7 @@ test("matters get redacts client PII inside free text but keeps staff visible", 
     },
   };
   const { module, restore } = loadCommandModule(matterSpec, {
-    fetchMatter: async () => payload,
+    fetchResourceById: async () => payload,
   });
 
   try {
@@ -849,7 +869,7 @@ test("activities get redacts note PII but keeps user details visible", async () 
     },
   };
   const { module, restore } = loadCommandModule(activitySpec, {
-    fetchActivity: async () => payload,
+    fetchResourceById: async () => payload,
   });
 
   try {
@@ -869,15 +889,8 @@ test("activities get redacts note PII but keeps user details visible", async () 
 
 test("billable clients list redacts client names in table output", async () => {
   const billableClientSpec = billableSpecs.find((spec) => spec.name === "billable clients");
-  const { module, restore } = loadWithMocks(path.join(ROOT, billableClientSpec.moduleFile), {
-    "./clio-api": {
-      getValidAccessToken: async () => "fresh-token",
-      fetchBillableClientsPage: async () => buildPage([billableClientSpec.sample]),
-    },
-    "./store": {
-      getConfig: async () => BASE_CONFIG,
-      getTokenSet: async () => BASE_TOKEN_SET,
-    },
+  const { module, restore } = loadCommandModule(billableClientSpec, {
+    fetchResourcePage: async () => buildPage([billableClientSpec.sample]),
   });
 
   try {
@@ -896,7 +909,7 @@ test("users get remains unchanged in redacted mode", async () => {
   const userSpec = specs.find((spec) => spec.name === "users");
   const payload = { data: userSpec.sample };
   const { module, restore } = loadCommandModule(userSpec, {
-    fetchUser: async () => payload,
+    fetchResourceById: async () => payload,
   });
 
   try {

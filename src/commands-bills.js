@@ -1,25 +1,16 @@
 const {
-  fetchBill,
-  fetchBillsPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatMoney,
   parseLimit,
   printKeyValueRows,
   readContactName,
   readMatterLabel,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createGetCommand, createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,number,state,type,kind,subject,memo,issued_at,due_at,paid,paid_at,pending,due,total,balance,created_at,updated_at,client{id,name,first_name,last_name},matters{id,display_number,number,description}";
-const DEFAULT_GET_FIELDS =
-  "id,number,state,type,kind,subject,memo,issued_at,due_at,paid,paid_at,pending,due,total,balance,created_at,updated_at,client{id,name,first_name,last_name},matters{id,display_number,number,description}";
+const BILL_RESOURCE = getResourceMetadata("bills");
 const VALID_BILL_STATUSES = new Set(["all", "overdue"]);
 
 function normalizeBillStatusFilters(options = {}) {
@@ -76,7 +67,7 @@ function buildBillQuery(options) {
     created_since: options.createdSince || undefined,
     due_after: options.dueAfter || undefined,
     due_before: options.dueBefore || undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || BILL_RESOURCE.defaultFields.list,
     issued_after: options.issuedAfter || undefined,
     issued_before: options.issuedBefore || undefined,
     limit: parseLimit(options.limit),
@@ -170,72 +161,23 @@ function printBill(bill) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
+const billsList = createListCommand({
+  apiPath: BILL_RESOURCE.apiPath,
+  buildQuery: buildBillQuery,
+  formatRow: formatBillRow,
+  pluralLabel: BILL_RESOURCE.summaryLabels.plural,
+  printList: printBillList,
+  redactionResourceType: BILL_RESOURCE.redaction.resourceType,
+  singularLabel: BILL_RESOURCE.summaryLabels.singular,
+});
 
-async function billsList(options = {}) {
-  const query = buildBillQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchBillsPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "bill");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "bill");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "bill").map(formatBillRow);
-  printBillList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} bill${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
-
-async function billsGet(options = {}) {
-  if (!options.id) {
-    throw new Error("Usage: not-manage bills get <id> [--fields ...] [--json]");
-  }
-
-  const { config, accessToken } = await getAuthContext();
-  const payload = await fetchBill(config, accessToken, options.id, {
-    fields: options.fields || DEFAULT_GET_FIELDS,
-  });
-  const redactedPayload = maybeRedactPayload(payload, options, "bill");
-
-  if (options.json) {
-    console.log(JSON.stringify(redactedPayload, null, 2));
-    return;
-  }
-
-  printBill(redactedPayload?.data || {});
-}
+const billsGet = createGetCommand({
+  apiPath: BILL_RESOURCE.apiPath,
+  defaultFields: BILL_RESOURCE.defaultFields.get,
+  printItem: printBill,
+  redactionResourceType: BILL_RESOURCE.redaction.resourceType,
+  usage: "Usage: not-manage bills get <id> [--fields ...] [--json]",
+});
 
 module.exports = {
   billsGet,

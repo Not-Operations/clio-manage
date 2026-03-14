@@ -358,6 +358,7 @@ async function fetchBillableClientsPage(
 module.exports = {
   authorizeUrl,
   createActivity,
+  createResource,
   deauthorize,
   exchangeAuthorizationCode,
   fetchActivitiesPage,
@@ -374,6 +375,8 @@ module.exports = {
   fetchMattersPage,
   fetchPracticeArea,
   fetchPracticeAreasPage,
+  fetchResourceById,
+  fetchResourcePage,
   fetchUser,
   fetchUsersPage,
   fetchWhoAmI,

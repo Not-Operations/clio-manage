@@ -1,27 +1,21 @@
 const {
-  fetchBillableMattersPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatMoney,
   parseLimit,
   printKeyValueRows,
   readContactName,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,display_number,unbilled_hours,unbilled_amount,amount_in_trust,client{id,name,first_name,last_name}";
+const BILLABLE_MATTER_RESOURCE = getResourceMetadata("billable-matters");
 
 function buildBillableMatterQuery(options) {
   return compactQuery({
     client_id: options.clientId || undefined,
     end_date: options.endDate || undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || BILLABLE_MATTER_RESOURCE.defaultFields.list,
     limit: parseLimit(options.limit, 1000),
     matter_id: options.matterId || undefined,
     originating_attorney_id: options.originatingAttorneyId || undefined,
@@ -34,11 +28,14 @@ function buildBillableMatterQuery(options) {
 
 function formatBillableMatterRow(record) {
   return {
+    amount: formatMoney(record.unbilled_amount),
+    client: readContactName(record.client),
+    hours:
+      record.unbilled_hours === undefined || record.unbilled_hours === null
+        ? "-"
+        : Number(record.unbilled_hours).toFixed(2),
     id: String(record.id || "-"),
     matter: String(record.display_number || "-"),
-    client: readContactName(record.client),
-    hours: record.unbilled_hours === undefined || record.unbilled_hours === null ? "-" : Number(record.unbilled_hours).toFixed(2),
-    amount: formatMoney(record.unbilled_amount),
     trust: formatMoney(record.amount_in_trust),
   };
 }
@@ -88,56 +85,15 @@ function printBillableMatter(record) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
-
-async function billableMattersList(options = {}) {
-  const query = buildBillableMatterQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) =>
-      fetchBillableMattersPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "billable-matter");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "billable-matter");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "billable-matter").map(
-    formatBillableMatterRow
-  );
-  printBillableMatterList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} billable matter${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
+const billableMattersList = createListCommand({
+  apiPath: BILLABLE_MATTER_RESOURCE.apiPath,
+  buildQuery: buildBillableMatterQuery,
+  formatRow: formatBillableMatterRow,
+  pluralLabel: BILLABLE_MATTER_RESOURCE.summaryLabels.plural,
+  printList: printBillableMatterList,
+  redactionResourceType: BILLABLE_MATTER_RESOURCE.redaction.resourceType,
+  singularLabel: BILLABLE_MATTER_RESOURCE.summaryLabels.singular,
+});
 
 module.exports = {
   billableMattersList,

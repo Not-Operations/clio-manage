@@ -1,25 +1,16 @@
 const {
-  fetchTask,
-  fetchTasksPage,
-  getValidAccessToken,
-} = require("./clio-api");
-const { getConfig, getTokenSet } = require("./store");
-const {
   clip,
   compactQuery,
-  fetchPages,
   formatBoolean,
   parseLimit,
   printKeyValueRows,
   readMatterLabel,
   readUserName,
 } = require("./resource-utils");
-const { maybeRedactData, maybeRedactPayload } = require("./redaction");
+const { createGetCommand, createListCommand } = require("./resource-command-runner");
+const { getResourceMetadata } = require("./resource-metadata");
 
-const DEFAULT_LIST_FIELDS =
-  "id,name,description,status,priority,due_at,created_at,updated_at,matter{id,display_number,number,description,client},assignee{id,name},assigner{id,name},task_type{id,name}";
-const DEFAULT_GET_FIELDS =
-  "id,name,description,status,priority,due_at,created_at,updated_at,matter{id,display_number,number,description,client},assignee{id,name},assigner{id,name},task_type{id,name}";
+const TASK_RESOURCE = getResourceMetadata("tasks");
 
 function readTaskStatus(status) {
   if (!status) {
@@ -55,7 +46,7 @@ function buildTaskQuery(options) {
     created_since: options.createdSince || undefined,
     due_at_from: options.dueAtFrom || undefined,
     due_at_to: options.dueAtTo || undefined,
-    fields: options.fields || DEFAULT_LIST_FIELDS,
+    fields: options.fields || TASK_RESOURCE.defaultFields.list,
     limit: parseLimit(options.limit),
     matter_id: options.matterId || undefined,
     order: options.order || undefined,
@@ -132,72 +123,23 @@ function printTask(task) {
   ]);
 }
 
-async function getAuthContext() {
-  const config = await getConfig();
-  const tokenSet = await getTokenSet();
-  const accessToken = await getValidAccessToken(config, tokenSet);
-  return { config, accessToken };
-}
+const tasksList = createListCommand({
+  apiPath: TASK_RESOURCE.apiPath,
+  buildQuery: buildTaskQuery,
+  formatRow: formatTaskRow,
+  pluralLabel: TASK_RESOURCE.summaryLabels.plural,
+  printList: printTaskList,
+  redactionResourceType: TASK_RESOURCE.redaction.resourceType,
+  singularLabel: TASK_RESOURCE.summaryLabels.singular,
+});
 
-async function tasksList(options = {}) {
-  const query = buildTaskQuery(options);
-  const { config, accessToken } = await getAuthContext();
-  const result = await fetchPages(
-    (pageQuery, nextPageUrl) => fetchTasksPage(config, accessToken, pageQuery, nextPageUrl),
-    query,
-    Boolean(options.all)
-  );
-
-  if (options.json) {
-    const firstPage = maybeRedactPayload(result.firstPage, options, "task");
-    if (!options.all) {
-      console.log(JSON.stringify(firstPage, null, 2));
-      return;
-    }
-
-    const data = maybeRedactData(result.data, options, "task");
-    console.log(
-      JSON.stringify(
-        {
-          data,
-          meta: {
-            pages_fetched: result.pagesFetched,
-            returned_count: data.length,
-          },
-        },
-        null,
-        2
-      )
-    );
-    return;
-  }
-
-  const rows = maybeRedactData(result.data, options, "task").map(formatTaskRow);
-  printTaskList(rows, { all: Boolean(options.all), nextPageUrl: result.nextPageUrl });
-  console.log("");
-  console.log(
-    `Returned ${rows.length} task${rows.length === 1 ? "" : "s"} across ${result.pagesFetched} page${result.pagesFetched === 1 ? "" : "s"}.`
-  );
-}
-
-async function tasksGet(options = {}) {
-  if (!options.id) {
-    throw new Error("Usage: not-manage tasks get <id> [--fields ...] [--json]");
-  }
-
-  const { config, accessToken } = await getAuthContext();
-  const payload = await fetchTask(config, accessToken, options.id, {
-    fields: options.fields || DEFAULT_GET_FIELDS,
-  });
-  const redactedPayload = maybeRedactPayload(payload, options, "task");
-
-  if (options.json) {
-    console.log(JSON.stringify(redactedPayload, null, 2));
-    return;
-  }
-
-  printTask(redactedPayload?.data || {});
-}
+const tasksGet = createGetCommand({
+  apiPath: TASK_RESOURCE.apiPath,
+  defaultFields: TASK_RESOURCE.defaultFields.get,
+  printItem: printTask,
+  redactionResourceType: TASK_RESOURCE.redaction.resourceType,
+  usage: "Usage: not-manage tasks get <id> [--fields ...] [--json]",
+});
 
 module.exports = {
   tasksGet,
