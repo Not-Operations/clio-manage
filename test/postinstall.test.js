@@ -255,7 +255,7 @@ test("postinstall main never fails the install when setup throws", async () => {
       })
     );
 
-    assert.match(errors.join("\n"), /Post-install setup was skipped: boom/);
+    assert.match(errors.join("\n"), /^Post-install setup was skipped\.$/);
     assert.match(logs.join("\n"), /Run `not-manage setup` when you are ready\./);
   } finally {
     restore();

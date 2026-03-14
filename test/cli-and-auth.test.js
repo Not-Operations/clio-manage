@@ -745,10 +745,7 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     assert.match(output, /select only the permissions this CLI will actually use/i);
     assert.match(output, /Redirect URIs: copy this exact URL on its own line/);
     assert.match(output, /You do not need to paste the redirect URI back into this CLI unless you want to override it/);
-    assert.match(
-      output,
-      new RegExp(REGIONS.ca.developerPortalUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    );
+    assert.ok(output.includes(REGIONS.ca.developerPortalUrl));
     assert.match(output, /If you already have a Clio developer app in this region, you can use it/);
     assert.match(output, /Opened the Canada Clio developer portal in your browser/);
     assert.match(output, /In the developer portal:/);
@@ -760,10 +757,7 @@ test("authSetup opens the selected regional developer portal only after Enter", 
     assert.match(output, /Register this exact URL in your Clio developer app/);
     assert.match(output, /Then:/);
     assert.match(output, /Copy the App Key and App Secret from that same app back here/);
-    assert.match(
-      output,
-      new RegExp(DEFAULT_REDIRECT_URI.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    );
+    assert.ok(output.includes(DEFAULT_REDIRECT_URI));
     assert.deepStrictEqual(authHarness.openCalls, [REGIONS.ca.developerPortalUrl]);
     assert.deepStrictEqual(
       authHarness.promptLabels.map((entry) => entry.label),
@@ -978,6 +972,54 @@ test("whoAmI falls back to the user detail endpoint when the summary omits email
         },
       },
     ]);
+  } finally {
+    restore();
+  }
+});
+
+test("authLogin masks the connected user email in console output", async () => {
+  const { module, restore } = loadAuthModule();
+
+  try {
+    const { logs } = await captureConsole(() => module.authLogin());
+    assert.ok(logs.includes("Connected user: Casey Example <c****@test> (id: 1)"));
+  } finally {
+    restore();
+  }
+});
+
+test("authStatus masks the connected user email in console output", async () => {
+  const { module, restore } = loadAuthModule({
+    storeOverrides: {
+      getTokenSet: async () => ({
+        accessToken: "stored-access-token",
+        source: "keychain",
+      }),
+    },
+  });
+
+  try {
+    const { logs } = await captureConsole(() => module.authStatus());
+    assert.ok(logs.includes("Connected user: Casey Example <c****@test> (id: 1)"));
+  } finally {
+    restore();
+  }
+});
+
+test("authStatus masks the connected user email in JSON output", async () => {
+  const { module, restore } = loadAuthModule({
+    storeOverrides: {
+      getTokenSet: async () => ({
+        accessToken: "stored-access-token",
+        source: "keychain",
+      }),
+    },
+  });
+
+  try {
+    const { logs } = await captureConsole(() => module.authStatus({ json: true }));
+    const payload = JSON.parse(logs.join("\n"));
+    assert.equal(payload.user.email, "c****@test");
   } finally {
     restore();
   }

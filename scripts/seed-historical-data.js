@@ -1361,9 +1361,9 @@ async function run() {
     } catch (error) {
       summary.failures.push({
         case: `${clientName} / ${profile.matter.title}`,
-        message: error.message,
+        message: "request failed",
       });
-      console.error(`  failed: ${error.message}`);
+      console.error("  failed: request failed");
     }
   }
 
@@ -1386,7 +1386,7 @@ async function run() {
   ));
 }
 
-run().catch((error) => {
-  console.error(error.message);
+run().catch((_error) => {
+  console.error("Seed run failed.");
   process.exitCode = 1;
 });

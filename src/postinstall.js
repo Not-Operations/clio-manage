@@ -121,8 +121,8 @@ async function main(options = {}) {
 
   try {
     await maybeRunPostinstallOnboarding(options);
-  } catch (error) {
-    errorLog(`Post-install setup was skipped: ${error.message}`);
+  } catch (_error) {
+    errorLog("Post-install setup was skipped.");
     log("Run `not-manage setup` when you are ready.");
   }
 }

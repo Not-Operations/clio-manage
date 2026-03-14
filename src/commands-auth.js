@@ -80,6 +80,60 @@ function maskCredential(value) {
   return `${text.slice(0, 4)}...${text.slice(-4)}`;
 }
 
+function maskEmail(value) {
+  const text = String(value || "").trim();
+  const atIndex = text.indexOf("@");
+
+  if (!text || text === "unknown" || atIndex <= 0 || atIndex === text.length - 1) {
+    return text || "unknown";
+  }
+
+  const localPart = text.slice(0, atIndex);
+  const domain = text.slice(atIndex);
+  return `${localPart.slice(0, 1)}${"*".repeat(Math.max(localPart.length - 1, 0))}${domain}`;
+}
+
+function maskUserSummary(user) {
+  if (!user) {
+    return user;
+  }
+
+  return {
+    ...user,
+    email: maskEmail(user.email),
+  };
+}
+
+function resolveRegionInfo(regionCode) {
+  if (regionCode && REGIONS[regionCode]) {
+    return REGIONS[regionCode];
+  }
+
+  return {
+    code: regionCode || "unknown",
+    label: regionCode || "unknown",
+    host: "unknown",
+  };
+}
+
+function buildAuthDisplayContext(config, tokenSet = null, user = null) {
+  const regionInfo = resolveRegionInfo(config?.region);
+
+  return {
+    configSource: config?.source === "keychain" ? "keychain" : String(config?.source || "unknown"),
+    host: regionInfo.host,
+    redirectUri:
+      config?.redirectUri === DEFAULT_REDIRECT_URI
+        ? DEFAULT_REDIRECT_URI
+        : "custom loopback redirect configured",
+    region: regionInfo.code,
+    regionLabel: regionInfo.label,
+    tokenSource:
+      tokenSet?.source === "keychain" ? "keychain" : String(tokenSet?.source || "unknown"),
+    user: maskUserSummary(user),
+  };
+}
+
 function formatConfigSummary(config) {
   return [
     `Config source: ${config.source}`,
@@ -308,11 +362,12 @@ async function authLogin(options = {}) {
   const config = options.config || (await getConfig());
   const state = crypto.randomBytes(16).toString("hex");
   const authUrl = authorizeUrl(config, state);
+  const authContext = buildAuthDisplayContext(config);
 
-  console.log(`Config source: ${config.source}`);
-  console.log(`Starting OAuth for region ${config.region} (${config.regionLabel}).`);
-  console.log(`Using host ${config.host}`);
-  console.log(`Waiting for callback on ${config.redirectUri}`);
+  console.log(`Config source: ${authContext.configSource}`);
+  console.log(`Starting OAuth for region ${authContext.region} (${authContext.regionLabel}).`);
+  console.log(`Using host ${authContext.host}`);
+  console.log(`Waiting for callback on ${authContext.redirectUri}`);
 
   const callbackPromise = waitForOAuthCallback(config.redirectUri, state);
 
@@ -336,19 +391,21 @@ async function authLogin(options = {}) {
   const tokenSet = await saveTokenSet(tokenPayload);
   const accessToken = await getValidAccessToken(config, tokenSet);
   const { user } = await fetchCurrentUserSummary(config, accessToken);
+  const maskedUser = maskUserSummary(user);
 
   console.log("");
   console.log("Clio login complete.");
-  console.log(`Connected user: ${user.name} <${user.email}> (id: ${user.id})`);
+  console.log(`Connected user: ${maskedUser.name} <${maskedUser.email}> (id: ${maskedUser.id})`);
 }
 
 async function authStatus(options = {}) {
   const config = await getConfig();
   const tokenSet = await getTokenSet();
+  const disconnectedContext = buildAuthDisplayContext(config);
 
   if (!tokenSet || !tokenSet.accessToken) {
-    console.log(`Config source: ${config.source}`);
-    console.log(`Region: ${config.region} (${config.regionLabel})`);
+    console.log(`Config source: ${disconnectedContext.configSource}`);
+    console.log(`Region: ${disconnectedContext.region} (${disconnectedContext.regionLabel})`);
     console.log("Login status: not logged in");
     console.log("Run `not-manage auth login`.");
     return;
@@ -357,16 +414,17 @@ async function authStatus(options = {}) {
   const accessToken = await getValidAccessToken(config, tokenSet);
   const { user } = await fetchCurrentUserSummary(config, accessToken);
   const warnings = collectSecurityWarnings(config, tokenSet);
+  const authContext = buildAuthDisplayContext(config, tokenSet, user);
 
   if (options.json) {
     console.log(
       JSON.stringify(
         {
-          configSource: config.source,
-          tokenSource: tokenSet.source,
-          region: config.region,
-          host: config.host,
-          user,
+          configSource: authContext.configSource,
+          tokenSource: authContext.tokenSource,
+          region: authContext.region,
+          host: authContext.host,
+          user: authContext.user,
         },
         null,
         2
@@ -375,12 +433,14 @@ async function authStatus(options = {}) {
     return;
   }
 
-  console.log(`Config source: ${config.source}`);
-  console.log(`Token source: ${tokenSet.source}`);
-  console.log(`Region: ${config.region} (${config.regionLabel})`);
-  console.log(`Host: ${config.host}`);
+  console.log(`Config source: ${authContext.configSource}`);
+  console.log(`Token source: ${authContext.tokenSource}`);
+  console.log(`Region: ${authContext.region} (${authContext.regionLabel})`);
+  console.log(`Host: ${authContext.host}`);
   console.log(`Login status: connected`);
-  console.log(`Connected user: ${user.name} <${user.email}> (id: ${user.id})`);
+  console.log(
+    `Connected user: ${authContext.user.name} <${authContext.user.email}> (id: ${authContext.user.id})`
+  );
   warnings.forEach((warning) => {
     console.log(`Security warning: ${warning}`);
   });
@@ -457,9 +517,12 @@ module.exports = {
   setupWizard,
   whoAmI,
   __private: {
+    buildAuthDisplayContext,
     collectSecurityWarnings,
     fetchCurrentUserSummary,
     formatUserSummary,
     hydrateUserSummary,
+    maskEmail,
+    maskUserSummary,
   },
 };
