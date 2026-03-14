@@ -12,6 +12,20 @@ This project is a local-only CLI, so its operational profile is different from a
 
 Security-sensitive reports should follow the private reporting process in `SECURITY.md` rather than public issues.
 
+## Incident notification
+
+If Not Operations confirms a security incident that affects sensitive information under its control for this product, or confirms a product vulnerability for which users need to take action, Not Operations will aim to notify affected parties no later than 72 hours after discovery and again as material new facts become available.
+
+The notice should include:
+
+- the nature of the incident
+- a contact path for follow-up questions
+- known or likely consequences
+- mitigations already taken
+- actions customers should take, if any
+
+Because `not-manage` is a local-only CLI, most sensitive runtime data remains on customer-controlled devices rather than a Not Operations-hosted environment. That means some incidents may primarily require software update guidance rather than direct per-customer breach notification.
+
 ## Business continuity and disaster recovery
 
 - Source of truth: the GitHub repository is the canonical source for code, workflows, and documentation.

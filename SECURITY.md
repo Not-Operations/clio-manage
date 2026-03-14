@@ -4,9 +4,40 @@ This CLI handles OAuth credentials and can access sensitive law-firm data. Treat
 
 ## Reporting a vulnerability
 
+- Security contact: `hello@notoperations.com`
+- Use the subject line: `Security report: not-manage`
 - Do not open a public issue with exploit details, credentials, tokens, or client data.
 - If GitHub private vulnerability reporting is enabled for this repository, use it.
-- Otherwise, contact the maintainers through the repository owner's public contact channel and request a private disclosure path before sharing technical details.
+
+## Scope
+
+This policy applies to:
+
+- the public GitHub repository for `not-manage`
+- the published npm package
+- the local OAuth setup and callback flow
+- local credential storage and token handling
+- local redaction behavior and command output handling
+
+This policy does not authorize testing against:
+
+- Clio systems or infrastructure beyond normal authorized use needed to evaluate the CLI
+- GitHub, npm, Vercel, or other third-party infrastructure
+- accounts, devices, or datasets you do not own or control
+- social engineering, phishing, physical intrusion, spam, or denial-of-service activity
+
+## Safe harbor
+
+If you:
+
+- act in good faith
+- follow this policy and `CUSTOMER-TESTING.md`
+- avoid privacy violations, data destruction, service disruption, and unauthorized access
+- give Not Operations a reasonable opportunity to investigate and remediate before public disclosure
+
+then Not Operations will not pursue legal action or request law-enforcement investigation solely for that research.
+
+This safe harbor applies only to `not-manage` and Not Operations-controlled assets. It does not extend to Clio or other third-party providers.
 
 Include:
 
@@ -45,7 +76,7 @@ If a fix is not ready inside the target window, the maintainers should publish a
 - OAuth credentials and tokens are stored in the OS keychain.
 - Redaction reduces risk but is best-effort only and must not be treated as a guarantee.
 
-## Scope
+## Examples of security issues in scope
 
 Security issues include, for example:
 

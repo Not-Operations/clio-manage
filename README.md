@@ -95,6 +95,11 @@ During setup, the CLI asks you to acknowledge that:
 - [SECURITY.md](SECURITY.md)
 - [TERMS.md](TERMS.md)
 - [OPERATIONS.md](OPERATIONS.md)
+- [SUPPORT.md](SUPPORT.md)
+- [CUSTOMER-TESTING.md](CUSTOMER-TESTING.md)
+- [SUBPROCESSORS.md](SUBPROCESSORS.md)
+- [MVSP-SELF-ASSESSMENT.md](MVSP-SELF-ASSESSMENT.md)
+- [CLIO-APP-DIRECTORY-CHECKLIST.md](CLIO-APP-DIRECTORY-CHECKLIST.md)
 
 ## Core commands
 
@@ -200,6 +205,13 @@ not-manage matter get 456 --redacted
 - Semgrep Community Edition runs on pull requests, default-branch pushes, and a weekly schedule for JavaScript-focused static security scanning.
 - Dependabot is configured for both npm dependencies and GitHub Actions.
 - npm release publishing is set up for provenance-backed trusted publishing from GitHub Actions using the `npm` environment.
+
+## Support
+
+- Public support page: [SUPPORT.md](SUPPORT.md)
+- Public support contact: `hello@notoperations.com`
+- Bug reports and feature requests: `https://github.com/Not-Operations/not-manage/issues`
+- Security reports: see [SECURITY.md](SECURITY.md)
 
 ## Troubleshooting
 
